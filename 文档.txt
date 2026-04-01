@@ -1,0 +1,17 @@
+相关资料下载地址：github.com/makerbase-mks
+博客：blog.csdn.net/gjy_skyblue
+创客QQ群：3d打印q群：232237692，激光群：650031716，foc群：732557609电机群：948665794
+B站：space.bilibili.com/393688975
+
+oDrive入门教程博客:
+https://blog.csdn.net/gjy_skyblue
+oDrive入门教程视频:
+https://space.bilibili.com/393688975
+oDrive 官方网站:
+https://odriverobotics.com/
+oDrive github:
+https:// github.com/odriverobotics/ODrive
+MKS oDrive github:
+https:// github.com/makerbase-motor/ODrive-MKS
+技术支持Q群:
+732557609
