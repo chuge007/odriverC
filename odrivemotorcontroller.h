@@ -158,9 +158,9 @@ public:
     bool estop(quint8 nodeId);
     bool clearErrors(bool identify = false);
     bool clearErrors(quint8 nodeId, bool identify = false);
-    void requestAllTelemetry();
-    void requestAllTelemetry(quint8 nodeId);
-    void requestTrackedTelemetry();
+    void requestAllTelemetry(bool quiet = true);
+    void requestAllTelemetry(quint8 nodeId, bool quiet = true);
+    void requestTrackedTelemetry(bool quiet = true);
     void probeNode(quint8 nodeId);
     void probeAllNodes();
     bool sendRawCanFrame(quint32 frameId,
@@ -196,7 +196,7 @@ private:
     bool isSlcanConnected() const;
     bool isCandleConnected() const;
     bool sendFrame(quint8 nodeId, CommandId commandId, const QByteArray &payload, bool quiet = false);
-    bool requestRemoteFrame(quint8 nodeId, CommandId commandId);
+    bool requestRemoteFrame(quint8 nodeId, CommandId commandId, bool quiet = true);
     bool slcanWriteFrame(quint32 frameId, const QByteArray &payload, bool remoteFrame, bool quiet, const QString &label, bool extendedFrame = false);
     bool slcanWriteRaw(const QByteArray &command, bool quiet = false);
     bool slcanWriteCommand(const QByteArray &command,
@@ -210,7 +210,7 @@ private:
     static QByteArray encodeSlcanFrame(quint32 frameId, const QByteArray &payload, bool remoteFrame, bool extendedFrame);
     bool processSlcanLine(const QByteArray &line);
     bool processCandleLine(const QByteArray &line);
-    void processFrame(quint8 nodeId, quint32 frameId, const QByteArray &payload);
+    bool processFrame(quint8 nodeId, quint32 frameId, const QByteArray &payload);
     quint32 frameIdFor(quint8 nodeId, CommandId commandId) const;
     void clearDevice();
     void clearSerialPort();

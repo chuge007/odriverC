@@ -19,13 +19,14 @@
 #include <QLibrary>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QCheckBox>
 #include <QRegularExpression>
+#include <QSettings>
 #include <QStringList>
 #include <QSpinBox>
 #include <QTextDocument>
-#include <QTextEdit>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QtGlobal>
@@ -103,6 +104,12 @@ bool checkSystemCanDriver(QString *errorMessage = nullptr)
     return false;
 }
 
+QString appSettingsPath()
+{
+    return QDir(QCoreApplication::applicationDirPath())
+            .filePath(QStringLiteral("odriver.ini"));
+}
+
 QString primaryButtonStyle()
 {
     return QStringLiteral(
@@ -145,6 +152,73 @@ QString topInputStyle()
                 "QSpinBox::up-button, QSpinBox::down-button { width: 18px; }");
 }
 
+QString decodeBitfield(quint32 value,
+                       const std::initializer_list<QPair<quint32, const char *>> &entries,
+                       const QString &noneText = QStringLiteral("None"))
+{
+    if (value == 0) {
+        return noneText;
+    }
+
+    QStringList parts;
+    quint32 remaining = value;
+    for (const auto &entry : entries) {
+        if ((value & entry.first) == entry.first) {
+            parts << QString::fromLatin1(entry.second);
+            remaining &= ~entry.first;
+        }
+    }
+    if (remaining != 0) {
+        parts << QStringLiteral("UNKNOWN(0x%1)")
+                     .arg(remaining, 0, 16)
+                     .toUpper();
+    }
+    return parts.join(QStringLiteral(" | "));
+}
+
+QString describeAxisError(quint32 value)
+{
+    return decodeBitfield(value, {
+                              qMakePair<quint32, const char *>(0x00000001u, "INVALID_STATE"),
+                              qMakePair<quint32, const char *>(0x00000040u, "MOTOR_FAILED"),
+                              qMakePair<quint32, const char *>(0x00000080u, "SENSORLESS_ESTIMATOR_FAILED"),
+                              qMakePair<quint32, const char *>(0x00000100u, "ENCODER_FAILED"),
+                              qMakePair<quint32, const char *>(0x00000200u, "CONTROLLER_FAILED"),
+                              qMakePair<quint32, const char *>(0x00000800u, "WATCHDOG_TIMER_EXPIRED"),
+                              qMakePair<quint32, const char *>(0x00001000u, "MIN_ENDSTOP_PRESSED"),
+                              qMakePair<quint32, const char *>(0x00002000u, "MAX_ENDSTOP_PRESSED"),
+                              qMakePair<quint32, const char *>(0x00004000u, "ESTOP_REQUESTED"),
+                              qMakePair<quint32, const char *>(0x00020000u, "HOMING_WITHOUT_ENDSTOP"),
+                              qMakePair<quint32, const char *>(0x00040000u, "OVER_TEMP"),
+                              qMakePair<quint32, const char *>(0x00080000u, "UNKNOWN_POSITION")
+                          });
+}
+
+QString describeOdriveError(quint32 value)
+{
+    return decodeBitfield(value, {
+                              qMakePair<quint32, const char *>(0x00000001u, "CONTROL_ITERATION_MISSED"),
+                              qMakePair<quint32, const char *>(0x00000002u, "DC_BUS_UNDER_VOLTAGE"),
+                              qMakePair<quint32, const char *>(0x00000004u, "DC_BUS_OVER_VOLTAGE"),
+                              qMakePair<quint32, const char *>(0x00000008u, "DC_BUS_OVER_REGEN_CURRENT"),
+                              qMakePair<quint32, const char *>(0x00000010u, "DC_BUS_OVER_CURRENT"),
+                              qMakePair<quint32, const char *>(0x00000020u, "BRAKE_DEADTIME_VIOLATION"),
+                              qMakePair<quint32, const char *>(0x00000040u, "BRAKE_DUTY_CYCLE_NAN"),
+                              qMakePair<quint32, const char *>(0x00000080u, "INVALID_BRAKE_RESISTANCE")
+                          });
+}
+
+QString describeDisarmReason(quint32 value)
+{
+    if (value == 0) {
+        return QStringLiteral("None");
+    }
+
+    return QStringLiteral("0x%1 (see ODrive disarm reason)")
+            .arg(value, 8, 16, QLatin1Char('0'))
+            .toUpper();
+}
+
 } // namespace
 
 MainWindow::MainWindow(QWidget *parent)
@@ -155,13 +229,22 @@ MainWindow::MainWindow(QWidget *parent)
       m_rxEdit(nullptr),
       m_txIdEdit(nullptr),
       m_txDlcSpin(nullptr),
-      m_txDataEdit(nullptr),
       m_txExtendedCheck(nullptr),
       m_txRemoteCheck(nullptr),
       m_txPeriodSpin(nullptr),
       m_txSendButton(nullptr),
       m_txToggleButton(nullptr),
+      m_txStatusLabel(nullptr),
+      m_txErrorCheck(nullptr),
       m_txTimer(nullptr),
+      m_txResponseTimer(nullptr),
+      m_logFlushTimer(nullptr),
+      m_rxFlushTimer(nullptr),
+      m_statusUpdateTimer(nullptr),
+      m_settingsSaveTimer(nullptr),
+      m_lastTxFrameId(0),
+      m_lastTxNodeId(0),
+      m_waitingForTxResponse(false),
       m_turnZeroTurns(0.0),
       m_driveZeroTurns(0.0),
       m_zeroPointInitialized(false)
@@ -171,22 +254,26 @@ MainWindow::MainWindow(QWidget *parent)
     populatePlugins();
     populateControlModes();
     populateInputModes();
+    loadSettings();
     refreshCanInterfaces();
     updateConnectionEditorHints();
     syncConnectionEditorsFromAdvanced();
     updateStatusPanel();
     syncAxisReadouts();
+    connectSettingsPersistence();
 
     connect(m_controller, &ODriveMotorController::connectionChanged,
             this, &MainWindow::updateConnectionState);
     connect(m_controller, &ODriveMotorController::statusUpdated,
-            this, &MainWindow::updateStatusPanel);
+            this, &MainWindow::scheduleStatusPanelUpdate);
     connect(m_controller, &ODriveMotorController::nodeStatusUpdated,
             this, &MainWindow::handleNodeStatusUpdate);
     connect(m_controller, &ODriveMotorController::logMessage,
             this, &MainWindow::appendLog);
     connect(m_controller, &ODriveMotorController::rxMessage,
             this, &MainWindow::appendRxMessage);
+    connect(m_controller, &ODriveMotorController::rxMessage,
+            this, &MainWindow::handleCustomTxRxMessage);
     connect(m_controller, &ODriveMotorController::errorMessage,
             this, &MainWindow::appendLog);
 
@@ -202,6 +289,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    saveSettings();
     delete ui;
 }
 
@@ -333,6 +421,20 @@ void MainWindow::updateConnectionState(bool connected)
 
     if (!connected) {
         m_scanState = ScanState();
+        m_waitingForTxResponse = false;
+        if (m_txTimer) {
+            m_txTimer->stop();
+        }
+        if (m_txResponseTimer) {
+            m_txResponseTimer->stop();
+        }
+        if (m_txToggleButton) {
+            m_txToggleButton->setText(QStringLiteral("Send Repeat"));
+        }
+        if (m_txStatusLabel) {
+            m_txStatusLabel->setText(QStringLiteral("Status: idle"));
+            m_txStatusLabel->setStyleSheet(QStringLiteral("QLabel { color: #666666; font-weight: 600; }"));
+        }
         updateProgramStatus(zh("e8afb7e58588e8bf9ee68ea5204f4472697665"));
         syncAxisReadouts();
         updateStatusPanel();
@@ -353,8 +455,11 @@ void MainWindow::updateStatusPanel()
     if (!m_controller->isConnected() || !status.lastMessage.isValid()) {
         const QString placeholder = QStringLiteral("--");
         m_axisErrorValue->setText(placeholder);
+        m_axisErrorDetailValue->setText(placeholder);
         m_activeErrorsValue->setText(placeholder);
+        m_activeErrorsDetailValue->setText(placeholder);
         m_disarmReasonValue->setText(placeholder);
+        m_disarmReasonDetailValue->setText(placeholder);
         m_axisStateValue->setText(placeholder);
         m_procedureResultValue->setText(placeholder);
         m_trajectoryDoneValue->setText(placeholder);
@@ -371,8 +476,11 @@ void MainWindow::updateStatusPanel()
     }
 
     m_axisErrorValue->setText(formatHex(status.axisError));
+    m_axisErrorDetailValue->setText(describeAxisError(status.axisError));
     m_activeErrorsValue->setText(formatHex(status.activeErrors));
+    m_activeErrorsDetailValue->setText(describeOdriveError(status.activeErrors));
     m_disarmReasonValue->setText(formatHex(status.disarmReason));
+    m_disarmReasonDetailValue->setText(describeDisarmReason(status.disarmReason));
     m_axisStateValue->setText(QStringLiteral("%1 (%2)")
                               .arg(ODriveMotorController::axisStateName(status.axisState))
                               .arg(status.axisState));
@@ -405,10 +513,16 @@ void MainWindow::appendLog(const QString &message)
         return;
     }
 
+    if (message == m_lastLogMessage) {
+        return;
+    }
+    m_lastLogMessage = message;
+
     const QString timestamp = QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"));
-    const QString line = QStringLiteral("[%1] %2").arg(timestamp, message);
-    m_logEdit->append(line);
-    qInfo().noquote() << line;
+    m_pendingLogLines.append(QStringLiteral("[%1] %2").arg(timestamp, message));
+    if (m_logFlushTimer && !m_logFlushTimer->isActive()) {
+        m_logFlushTimer->start();
+    }
 }
 
 void MainWindow::appendRxMessage(const QString &message)
@@ -417,8 +531,54 @@ void MainWindow::appendRxMessage(const QString &message)
         return;
     }
 
+    if (message == m_lastRxMessage) {
+        return;
+    }
+    m_lastRxMessage = message;
+
     const QString timestamp = QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"));
-    m_rxEdit->append(QStringLiteral("[%1] %2").arg(timestamp, message));
+    m_pendingRxLines.append(QStringLiteral("[%1] %2").arg(timestamp, message));
+    if (m_rxFlushTimer && !m_rxFlushTimer->isActive()) {
+        m_rxFlushTimer->start();
+    }
+}
+
+void MainWindow::flushQueuedMessages()
+{
+    if (!m_logEdit || m_pendingLogLines.isEmpty()) {
+        return;
+    }
+
+    const QStringList lines = m_pendingLogLines;
+    m_pendingLogLines.clear();
+    m_logEdit->appendPlainText(lines.join(QStringLiteral("\n")));
+    for (const QString &line : lines) {
+        qInfo().noquote() << line;
+    }
+}
+
+void MainWindow::flushQueuedRxMessages()
+{
+    if (!m_rxEdit || m_pendingRxLines.isEmpty()) {
+        return;
+    }
+
+    m_rxEdit->appendPlainText(m_pendingRxLines.join(QStringLiteral("\n")));
+    m_pendingRxLines.clear();
+}
+
+void MainWindow::scheduleStatusPanelUpdate()
+{
+    if (m_statusUpdateTimer && !m_statusUpdateTimer->isActive()) {
+        m_statusUpdateTimer->start();
+    }
+}
+
+void MainWindow::scheduleSaveSettings()
+{
+    if (m_settingsSaveTimer && !m_settingsSaveTimer->isActive()) {
+        m_settingsSaveTimer->start();
+    }
 }
 
 static bool parseTxId(const QString &text, quint32 *outId)
@@ -442,44 +602,49 @@ static bool parseTxId(const QString &text, quint32 *outId)
     return true;
 }
 
-static QByteArray parseTxData(const QString &text)
+static bool parseTxByteText(const QString &text, char *outByte)
 {
+    if (!outByte) {
+        return false;
+    }
+
     const QString trimmed = text.trimmed();
-    if (trimmed.isEmpty()) return QByteArray();
-
-    if (trimmed.startsWith(QStringLiteral("ascii:"), Qt::CaseInsensitive)) {
-        return trimmed.mid(6).toUtf8();
-    }
-    if (trimmed.startsWith(QStringLiteral("hex:"), Qt::CaseInsensitive)) {
-        QString hex = trimmed.mid(4);
-        hex.remove(QRegularExpression(QStringLiteral("\\s+")));
-        return QByteArray::fromHex(hex.toLatin1());
+    if (trimmed.isEmpty()) {
+        *outByte = 0;
+        return true;
     }
 
-    QString hex = trimmed;
-    hex.remove(QRegularExpression(QStringLiteral("\\s+")));
-    if (!hex.isEmpty()
-            && (hex.size() % 2 == 0)
-            && !hex.contains(QRegularExpression(QStringLiteral("[^0-9A-Fa-f]")))) {
-        return QByteArray::fromHex(hex.toLatin1());
+    bool ok = false;
+    const int value = trimmed.toInt(&ok, 16);
+    if (!ok || value < 0x00 || value > 0xFF) {
+        return false;
     }
 
-    return trimmed.toUtf8();
+    *outByte = static_cast<char>(value);
+    return true;
 }
 
 void MainWindow::sendCustomTxOnce()
 {
     if (!m_controller || !m_controller->isConnected()) {
         appendLog(QStringLiteral("Transmit: not connected"));
+        if (m_txStatusLabel) {
+            m_txStatusLabel->setText(QStringLiteral("Status: not connected"));
+            m_txStatusLabel->setStyleSheet(QStringLiteral("QLabel { color: #9c2f2f; font-weight: 600; }"));
+        }
         return;
     }
-    if (!m_txIdEdit || !m_txDlcSpin || !m_txDataEdit || !m_txExtendedCheck || !m_txRemoteCheck) {
+    if (!m_txIdEdit || !m_txDlcSpin || !m_txExtendedCheck || !m_txRemoteCheck) {
         return;
     }
 
     quint32 frameId = 0;
     if (!parseTxId(m_txIdEdit->text(), &frameId)) {
         appendLog(QStringLiteral("Transmit: invalid ID"));
+        if (m_txStatusLabel) {
+            m_txStatusLabel->setText(QStringLiteral("Status: invalid address"));
+            m_txStatusLabel->setStyleSheet(QStringLiteral("QLabel { color: #9c2f2f; font-weight: 600; }"));
+        }
         return;
     }
 
@@ -489,10 +654,18 @@ void MainWindow::sendCustomTxOnce()
 
     if (!extended && frameId > 0x7FF) {
         appendLog(QStringLiteral("Transmit: ID > 0x7FF requires Extended mode"));
+        if (m_txStatusLabel) {
+            m_txStatusLabel->setText(QStringLiteral("Status: standard ID must be <= 0x7FF"));
+            m_txStatusLabel->setStyleSheet(QStringLiteral("QLabel { color: #9c2f2f; font-weight: 600; }"));
+        }
         return;
     }
     if (frameId > 0x1FFFFFFF) {
         appendLog(QStringLiteral("Transmit: ID must be <= 0x1FFFFFFF"));
+        if (m_txStatusLabel) {
+            m_txStatusLabel->setText(QStringLiteral("Status: ID must be <= 0x1FFFFFFF"));
+            m_txStatusLabel->setStyleSheet(QStringLiteral("QLabel { color: #9c2f2f; font-weight: 600; }"));
+        }
         return;
     }
 
@@ -500,16 +673,44 @@ void MainWindow::sendCustomTxOnce()
     if (remote) {
         payload = QByteArray(dlc, '\0');
     } else {
-        payload = parseTxData(m_txDataEdit->text()).left(8);
-        if (payload.size() < dlc) {
-            payload.append(QByteArray(dlc - payload.size(), '\0'));
-        } else if (payload.size() > dlc) {
-            payload = payload.left(dlc);
+        payload.resize(dlc);
+        for (int i = 0; i < dlc; ++i) {
+            char value = 0;
+            const QLineEdit *edit = (i < m_txByteEdits.size()) ? m_txByteEdits.at(i) : nullptr;
+            if (!parseTxByteText(edit ? edit->text() : QString(), &value)) {
+                appendLog(QStringLiteral("Transmit: invalid payload byte at index %1").arg(i + 1));
+                if (m_txStatusLabel) {
+                    m_txStatusLabel->setText(QStringLiteral("Status: payload byte %1 is invalid").arg(i + 1));
+                    m_txStatusLabel->setStyleSheet(QStringLiteral("QLabel { color: #9c2f2f; font-weight: 600; }"));
+                }
+                return;
+            }
+            payload[i] = value;
         }
     }
 
     if (!m_controller->sendRawCanFrame(frameId, payload, extended, remote, false)) {
         appendLog(QStringLiteral("Transmit: send failed"));
+        if (m_txStatusLabel) {
+            m_txStatusLabel->setText(QStringLiteral("Status: send failed"));
+            m_txStatusLabel->setStyleSheet(QStringLiteral("QLabel { color: #9c2f2f; font-weight: 600; }"));
+        }
+        m_waitingForTxResponse = false;
+        if (m_txResponseTimer) {
+            m_txResponseTimer->stop();
+        }
+        return;
+    }
+
+    m_lastTxFrameId = frameId;
+    m_lastTxNodeId = static_cast<quint8>((frameId >> 5) & 0x3F);
+    m_waitingForTxResponse = true;
+    if (m_txStatusLabel) {
+        m_txStatusLabel->setText(QStringLiteral("Status: sent, waiting for reply"));
+        m_txStatusLabel->setStyleSheet(QStringLiteral("QLabel { color: #ad6f00; font-weight: 600; }"));
+    }
+    if (m_txResponseTimer) {
+        m_txResponseTimer->start();
     }
 }
 
@@ -521,7 +722,7 @@ void MainWindow::toggleCustomTx()
 
     if (m_txTimer->isActive()) {
         m_txTimer->stop();
-        m_txToggleButton->setText(QStringLiteral("Start Repeat"));
+        m_txToggleButton->setText(QStringLiteral("Send Repeat"));
         appendLog(QStringLiteral("Transmit: repeat stopped"));
         return;
     }
@@ -535,6 +736,105 @@ void MainWindow::toggleCustomTx()
     m_txTimer->start();
     m_txToggleButton->setText(QStringLiteral("Stop Repeat"));
     appendLog(QStringLiteral("Transmit: repeat started"));
+}
+
+void MainWindow::handleCustomTxRxMessage(const QString &message)
+{
+    if (!m_waitingForTxResponse || !m_txStatusLabel) {
+        return;
+    }
+
+    const QString upperMessage = message.toUpper();
+    const QString frameIdToken = QStringLiteral("ID=%1")
+            .arg(QStringLiteral("0X%1").arg(m_lastTxFrameId, 3, 16, QLatin1Char('0')).toUpper());
+    const QString nodeToken = QStringLiteral("NODE=%1").arg(m_lastTxNodeId);
+
+    if (!upperMessage.contains(frameIdToken) && !upperMessage.contains(nodeToken)) {
+        return;
+    }
+
+    m_waitingForTxResponse = false;
+    if (m_txResponseTimer) {
+        m_txResponseTimer->stop();
+    }
+    m_txStatusLabel->setText(QStringLiteral("Status: reply received"));
+    m_txStatusLabel->setStyleSheet(QStringLiteral("QLabel { color: #0b7a37; font-weight: 600; }"));
+}
+
+void MainWindow::handleCustomTxResponseTimeout()
+{
+    if (!m_waitingForTxResponse || !m_txStatusLabel) {
+        return;
+    }
+
+    m_waitingForTxResponse = false;
+    m_txStatusLabel->setText(QStringLiteral("Status: sent, no reply seen"));
+    m_txStatusLabel->setStyleSheet(QStringLiteral("QLabel { color: #9c2f2f; font-weight: 600; }"));
+}
+
+void MainWindow::scanForActiveNodes()
+{
+    if (!m_controller->isConnected()) {
+        return;
+    }
+
+    appendLog(zh("e6ada3e59ca8e689abe68f8fe6b4bbe8b783e79a84204f4472697652020e88a82e782b9e280a6"));
+    m_detectedNodesCombo->clear();
+    m_detectedNodesCombo->setEnabled(false);
+    m_controller->probeAllNodes();
+    QTimer::singleShot(1500, this, &MainWindow::updateDetectedNodesList);
+}
+
+void MainWindow::updateDetectedNodesList()
+{
+    if (!m_controller->isConnected()) {
+        return;
+    }
+
+    const QList<quint8> activeNodes = m_controller->recentResponsiveNodeIds(2000);
+    
+    m_detectedNodesCombo->clear();
+    if (activeNodes.isEmpty()) {
+        m_activeNodesLabel->setText(zh("e6a380e6b58be588b0e79a84e88a82e782b9320e697a0"));
+        appendLog(zh("e69cae6a380e6b58be588b0e4bbe4bd95204f44726976652020e88a82e782b9e5938de5ba94"));
+        return;
+    }
+
+    for (quint8 nodeId : activeNodes) {
+        const QString nodeText = QStringLiteral("Node %1").arg(nodeId);
+        m_detectedNodesCombo->addItem(nodeText, nodeId);
+    }
+    
+    m_detectedNodesCombo->setEnabled(true);
+    QStringList nodeStrings;
+    for (quint8 nodeId : activeNodes) {
+        nodeStrings << QString::number(nodeId);
+    }
+    m_activeNodesLabel->setText(QStringLiteral("%1: %2").arg(zh("e6a380e6b58be588b0e79a84e88a82e782b9"), nodeStrings.join(", ")));
+    appendLog(QStringLiteral("%1 %2 %3: %4")
+              .arg(zh("e6a380e6b58be588b0"))
+              .arg(QString::number(activeNodes.size()))
+              .arg(zh("e4b8ae6b4bbe8b783e88a82e782b9"))
+              .arg(nodeStrings.join(", ")));
+    const int currentNodeIndex = m_detectedNodesCombo->findData(m_nodeIdSpin->value());
+    if (currentNodeIndex >= 0) {
+        m_detectedNodesCombo->setCurrentIndex(currentNodeIndex);
+    } else if (!activeNodes.isEmpty()) {
+        m_detectedNodesCombo->setCurrentIndex(0);
+        switchToDetectedNode(activeNodes.first());
+    }
+}
+
+void MainWindow::switchToDetectedNode(quint8 nodeId)
+{
+    if (m_nodeIdSpin) {
+        m_nodeIdSpin->setValue(nodeId);
+    }
+    m_controller->setDefaultNodeId(nodeId);
+    updateTrackedNodes();
+    m_controller->requestTrackedTelemetry();
+    appendLog(QStringLiteral("%1 Node %2").arg(zh("e5b7b2e5887e68da2e588b0"), QString::number(nodeId)));
+    updateProgramStatus(QStringLiteral("%1: %2").arg(zh("e5bd93e5898de68ea7e588b688a82e782b9"), QString::number(nodeId)));
 }
 
 void MainWindow::requestIdle()
@@ -764,8 +1064,7 @@ void MainWindow::stepAdvanceOnce()
 void MainWindow::handleNodeStatusUpdate(quint8 nodeId)
 {
     Q_UNUSED(nodeId);
-    syncAxisReadouts();
-    updateLinkStatusDisplay();
+    scheduleStatusPanelUpdate();
     if (m_scanState.active) {
         advanceScanStateMachine();
     }
@@ -779,6 +1078,30 @@ void MainWindow::buildUi()
     QVBoxLayout *mainLayout = new QVBoxLayout(ui->centralWidget);
     mainLayout->setContentsMargins(16, 14, 16, 14);
     mainLayout->setSpacing(14);
+
+    m_logFlushTimer = new QTimer(this);
+    m_logFlushTimer->setSingleShot(true);
+    m_logFlushTimer->setInterval(80);
+    connect(m_logFlushTimer, &QTimer::timeout, this, &MainWindow::flushQueuedMessages);
+
+    m_rxFlushTimer = new QTimer(this);
+    m_rxFlushTimer->setSingleShot(true);
+    m_rxFlushTimer->setInterval(80);
+    connect(m_rxFlushTimer, &QTimer::timeout, this, &MainWindow::flushQueuedRxMessages);
+
+    m_statusUpdateTimer = new QTimer(this);
+    m_statusUpdateTimer->setSingleShot(true);
+    m_statusUpdateTimer->setInterval(100);
+    connect(m_statusUpdateTimer, &QTimer::timeout, this, [this]() {
+        updateStatusPanel();
+        syncAxisReadouts();
+        updateLinkStatusDisplay();
+    });
+
+    m_settingsSaveTimer = new QTimer(this);
+    m_settingsSaveTimer->setSingleShot(true);
+    m_settingsSaveTimer->setInterval(250);
+    connect(m_settingsSaveTimer, &QTimer::timeout, this, [this]() { saveSettings(); });
 
     buildMainInterface(mainLayout);
     buildAdvancedDialog();
@@ -813,11 +1136,26 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
     m_linkStatusLabel->setMinimumWidth(90);
     m_linkStatusLabel->setStyleSheet(QStringLiteral("font-size: 18px;"));
 
+    m_activeNodesLabel = new QLabel(zh("e6a380e6b58be588b0e79a84e88a82e782b93a202d2d"), connectionGroup);
+    m_activeNodesLabel->setStyleSheet(QStringLiteral("font-size: 16px;"));
+    m_detectedNodesCombo = new QComboBox(connectionGroup);
+    m_detectedNodesCombo->setEnabled(false);
+    m_detectedNodesCombo->setMinimumWidth(120);
+    m_detectedNodesCombo->setStyleSheet(QStringLiteral("font-size: 16px;"));
+    
+    m_rescanNodesButton = new QPushButton(zh("e9878de696b0e689abe68f8f"), connectionGroup);
+    m_rescanNodesButton->setEnabled(false);
+    m_rescanNodesButton->setMinimumHeight(44);
+    m_rescanNodesButton->setStyleSheet(QStringLiteral("font-size: 16px; padding: 4px 12px;"));
+
     connectionLayout->addWidget(ipLabel);
     connectionLayout->addWidget(m_ipEdit, 1);
     connectionLayout->addWidget(m_connectButton);
     connectionLayout->addWidget(m_openAdvancedButton);
     connectionLayout->addWidget(m_linkStatusLabel);
+    connectionLayout->addWidget(m_activeNodesLabel);
+    connectionLayout->addWidget(m_detectedNodesCombo);
+    connectionLayout->addWidget(m_rescanNodesButton);
 
     QHBoxLayout *contentLayout = new QHBoxLayout;
     contentLayout->setSpacing(18);
@@ -975,15 +1313,19 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
 
     QGroupBox *rxGroup = new QGroupBox(zh("e68ea5e694b6e4bfa1e681af"), ui->centralWidget);
     QVBoxLayout *rxLayout = new QVBoxLayout(rxGroup);
-    m_rxEdit = new QTextEdit(rxGroup);
+    m_rxEdit = new QPlainTextEdit(rxGroup);
     m_rxEdit->setReadOnly(true);
+    m_rxEdit->setUndoRedoEnabled(false);
+    m_rxEdit->setLineWrapMode(QPlainTextEdit::NoWrap);
     m_rxEdit->document()->setMaximumBlockCount(400);
     rxLayout->addWidget(m_rxEdit);
 
     QGroupBox *logGroup = new QGroupBox(zh("e7b3bbe7bb9fe697a5e5bf97"), ui->centralWidget);
     QVBoxLayout *logLayout = new QVBoxLayout(logGroup);
-    m_logEdit = new QTextEdit(logGroup);
+    m_logEdit = new QPlainTextEdit(logGroup);
     m_logEdit->setReadOnly(true);
+    m_logEdit->setUndoRedoEnabled(false);
+    m_logEdit->setLineWrapMode(QPlainTextEdit::NoWrap);
     m_logEdit->document()->setMaximumBlockCount(400);
     logLayout->addWidget(m_logEdit);
 
@@ -995,6 +1337,15 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
             this, &MainWindow::toggleConnection);
     connect(m_openAdvancedButton, &QPushButton::clicked,
             this, &MainWindow::openAdvancedPanel);
+    connect(m_rescanNodesButton, &QPushButton::clicked,
+            this, &MainWindow::scanForActiveNodes);
+    connect(m_detectedNodesCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int index) {
+        if (index >= 0 && m_detectedNodesCombo->count() > 0) {
+            const quint8 nodeId = m_detectedNodesCombo->currentData().toUInt();
+            switchToDetectedNode(nodeId);
+        }
+    });
     connect(m_setZeroButton, &QPushButton::clicked,
             this, &MainWindow::setZeroPoint);
     connect(m_homeButton, &QPushButton::clicked,
@@ -1122,53 +1473,116 @@ void MainWindow::buildAdvancedDialog()
 
     QGroupBox *txGroup = new QGroupBox(QStringLiteral("Transmit"), m_advancedDialog);
     QGridLayout *txLayout = new QGridLayout(txGroup);
+    txLayout->setHorizontalSpacing(10);
+    txLayout->setVerticalSpacing(8);
 
     m_txIdEdit = new QLineEdit(txGroup);
-    m_txIdEdit->setPlaceholderText(QStringLiteral("0x123 or 291"));
+    m_txIdEdit->setPlaceholderText(QStringLiteral("207"));
     m_txIdEdit->setStyleSheet(topInputStyle());
+    m_txIdEdit->setMaximumWidth(110);
 
     m_txDlcSpin = new QSpinBox(txGroup);
     m_txDlcSpin->setRange(0, 8);
     m_txDlcSpin->setValue(8);
     m_txDlcSpin->setStyleSheet(topInputStyle());
+    m_txDlcSpin->setMaximumWidth(70);
 
-    m_txDataEdit = new QLineEdit(txGroup);
-    m_txDataEdit->setPlaceholderText(QStringLiteral("hex: 01 02 03 or ascii: hello"));
-    m_txDataEdit->setStyleSheet(topInputStyle());
-
-    m_txExtendedCheck = new QCheckBox(QStringLiteral("Extended (29-bit)"), txGroup);
-    m_txRemoteCheck = new QCheckBox(QStringLiteral("Remote (RTR)"), txGroup);
+    m_txExtendedCheck = new QCheckBox(QStringLiteral("Extended ID"), txGroup);
+    m_txRemoteCheck = new QCheckBox(QStringLiteral("RTR"), txGroup);
+    m_txErrorCheck = new QCheckBox(QStringLiteral("Error Frame"), txGroup);
+    m_txErrorCheck->setEnabled(false);
+    m_txErrorCheck->setToolTip(QStringLiteral("Raw Error Frame transmit is not supported in this tool."));
 
     m_txPeriodSpin = new QSpinBox(txGroup);
     m_txPeriodSpin->setRange(0, 600000);
-    m_txPeriodSpin->setValue(0);
+    m_txPeriodSpin->setValue(1000);
     m_txPeriodSpin->setSuffix(QStringLiteral(" ms"));
     m_txPeriodSpin->setStyleSheet(topInputStyle());
     m_txPeriodSpin->setToolTip(QStringLiteral("0 = send once, >0 = repeat interval"));
+    m_txPeriodSpin->setMaximumWidth(110);
 
-    m_txSendButton = new QPushButton(QStringLiteral("Send"), txGroup);
+    m_txSendButton = new QPushButton(QStringLiteral("Send Single"), txGroup);
     m_txSendButton->setMinimumHeight(44);
     m_txSendButton->setStyleSheet(QStringLiteral("font-size: 18px; padding: 4px 14px;"));
 
-    m_txToggleButton = new QPushButton(QStringLiteral("Start Repeat"), txGroup);
+    m_txToggleButton = new QPushButton(QStringLiteral("Send Repeat"), txGroup);
     m_txToggleButton->setMinimumHeight(44);
     m_txToggleButton->setStyleSheet(QStringLiteral("font-size: 18px; padding: 4px 14px;"));
 
-    txLayout->addWidget(new QLabel(QStringLiteral("ID")), 0, 0);
-    txLayout->addWidget(m_txIdEdit, 0, 1);
-    txLayout->addWidget(new QLabel(QStringLiteral("DLC")), 0, 2);
-    txLayout->addWidget(m_txDlcSpin, 0, 3);
-    txLayout->addWidget(m_txExtendedCheck, 0, 4);
+    m_txStatusLabel = new QLabel(QStringLiteral("Status: idle"), txGroup);
+    m_txStatusLabel->setStyleSheet(QStringLiteral("QLabel { color: #666666; font-weight: 600; }"));
 
-    txLayout->addWidget(new QLabel(QStringLiteral("Data")), 1, 0);
-    txLayout->addWidget(m_txDataEdit, 1, 1, 1, 3);
-    txLayout->addWidget(m_txRemoteCheck, 1, 4);
+    QVBoxLayout *addressLayout = new QVBoxLayout;
+    addressLayout->setSpacing(4);
+    addressLayout->addWidget(new QLabel(QStringLiteral("Address"), txGroup));
+    addressLayout->addWidget(m_txIdEdit);
 
-    txLayout->addWidget(new QLabel(QStringLiteral("Repeat")), 2, 0);
-    txLayout->addWidget(m_txPeriodSpin, 2, 1);
-    txLayout->addWidget(m_txSendButton, 2, 3);
-    txLayout->addWidget(m_txToggleButton, 2, 4);
-    txLayout->setColumnStretch(1, 1);
+    QVBoxLayout *dlcLayout = new QVBoxLayout;
+    dlcLayout->setSpacing(4);
+    dlcLayout->addWidget(new QLabel(QStringLiteral("DLC"), txGroup));
+    dlcLayout->addWidget(m_txDlcSpin);
+
+    QVBoxLayout *payloadLayoutHost = new QVBoxLayout;
+    payloadLayoutHost->setSpacing(4);
+    payloadLayoutHost->addWidget(new QLabel(QStringLiteral("Payload"), txGroup));
+
+    QGridLayout *payloadLayout = new QGridLayout;
+    payloadLayout->setHorizontalSpacing(6);
+    payloadLayout->setVerticalSpacing(2);
+    m_txByteEdits.clear();
+    for (int i = 0; i < 8; ++i) {
+        QLineEdit *byteEdit = new QLineEdit(txGroup);
+        byteEdit->setMaxLength(2);
+        byteEdit->setFixedWidth(42);
+        byteEdit->setAlignment(Qt::AlignCenter);
+        byteEdit->setPlaceholderText(QStringLiteral("00"));
+        byteEdit->setText(QStringLiteral("00"));
+        byteEdit->setStyleSheet(QStringLiteral(
+                                    "QLineEdit {"
+                                    " background: #ffffff;"
+                                    " border: 1px solid #cfcfcf;"
+                                    " border-radius: 4px;"
+                                    " padding: 4px 2px;"
+                                    " font-size: 20px;"
+                                    " min-height: 36px;"
+                                    "}"));
+        payloadLayout->addWidget(byteEdit, 0, i);
+
+        QLabel *indexLabel = new QLabel(QString::number(i + 1), txGroup);
+        indexLabel->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+        payloadLayout->addWidget(indexLabel, 1, i);
+        m_txByteEdits.append(byteEdit);
+    }
+    payloadLayoutHost->addLayout(payloadLayout);
+
+    QHBoxLayout *flagsLayout = new QHBoxLayout;
+    flagsLayout->setSpacing(18);
+    flagsLayout->addWidget(m_txExtendedCheck);
+    flagsLayout->addWidget(m_txRemoteCheck);
+    flagsLayout->addWidget(m_txErrorCheck);
+    flagsLayout->addStretch(1);
+
+    QVBoxLayout *buttonLayout = new QVBoxLayout;
+    buttonLayout->setSpacing(8);
+    buttonLayout->addStretch(1);
+    buttonLayout->addWidget(m_txSendButton);
+    buttonLayout->addWidget(m_txToggleButton);
+    buttonLayout->addStretch(1);
+
+    QHBoxLayout *repeatLayout = new QHBoxLayout;
+    repeatLayout->setSpacing(8);
+    repeatLayout->addWidget(new QLabel(QStringLiteral("Send Repeat"), txGroup));
+    repeatLayout->addWidget(m_txPeriodSpin);
+    repeatLayout->addSpacing(18);
+    repeatLayout->addWidget(m_txStatusLabel, 1);
+
+    txLayout->addLayout(addressLayout, 0, 0);
+    txLayout->addLayout(dlcLayout, 0, 1);
+    txLayout->addLayout(payloadLayoutHost, 0, 2);
+    txLayout->addLayout(buttonLayout, 0, 3);
+    txLayout->addLayout(flagsLayout, 1, 2);
+    txLayout->addLayout(repeatLayout, 2, 0, 1, 4);
+    txLayout->setColumnStretch(2, 1);
 
     layout->addWidget(txGroup);
     buildAdvancedContent(layout, m_advancedDialog);
@@ -1186,9 +1600,25 @@ void MainWindow::buildAdvancedDialog()
 
     m_txTimer = new QTimer(this);
     m_txTimer->setInterval(100);
+    m_txResponseTimer = new QTimer(this);
+    m_txResponseTimer->setSingleShot(true);
+    m_txResponseTimer->setInterval(1200);
     connect(m_txSendButton, &QPushButton::clicked, this, &MainWindow::sendCustomTxOnce);
     connect(m_txToggleButton, &QPushButton::clicked, this, &MainWindow::toggleCustomTx);
     connect(m_txTimer, &QTimer::timeout, this, &MainWindow::sendCustomTxOnce);
+    connect(m_txResponseTimer, &QTimer::timeout, this, &MainWindow::handleCustomTxResponseTimeout);
+    auto syncTxByteEditors = [this]() {
+        const int dlc = m_txDlcSpin ? m_txDlcSpin->value() : 0;
+        const bool remote = m_txRemoteCheck && m_txRemoteCheck->isChecked();
+        for (int i = 0; i < m_txByteEdits.size(); ++i) {
+            if (QLineEdit *edit = m_txByteEdits.at(i)) {
+                edit->setEnabled(!remote && i < dlc);
+            }
+        }
+    };
+    connect(m_txDlcSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [syncTxByteEditors](int) { syncTxByteEditors(); });
+    connect(m_txRemoteCheck, &QCheckBox::toggled, this, [syncTxByteEditors](bool) { syncTxByteEditors(); });
+    syncTxByteEditors();
 
     auto nodeChanged = [this]() {
         m_controller->setDefaultNodeId(static_cast<quint8>(m_nodeIdSpin->value()));
@@ -1335,12 +1765,24 @@ void MainWindow::buildAdvancedContent(QVBoxLayout *mainLayout, QWidget *parent)
     statusLayout->addWidget(new QLabel(zh("e5bf83e8b7b3e99499e8afaf")), row, 0);
     m_axisErrorValue = createValueLabel();
     statusLayout->addWidget(m_axisErrorValue, row++, 1);
+    statusLayout->addWidget(new QLabel(QStringLiteral("Axis error detail")), row, 0);
+    m_axisErrorDetailValue = createValueLabel();
+    m_axisErrorDetailValue->setWordWrap(true);
+    statusLayout->addWidget(m_axisErrorDetailValue, row++, 1);
     statusLayout->addWidget(new QLabel(zh("e5bd93e5898de99499e8afaf")), row, 0);
     m_activeErrorsValue = createValueLabel();
     statusLayout->addWidget(m_activeErrorsValue, row++, 1);
+    statusLayout->addWidget(new QLabel(QStringLiteral("ODrive error detail")), row, 0);
+    m_activeErrorsDetailValue = createValueLabel();
+    m_activeErrorsDetailValue->setWordWrap(true);
+    statusLayout->addWidget(m_activeErrorsDetailValue, row++, 1);
     statusLayout->addWidget(new QLabel(zh("e5a4b1e883bde58e9fe59ba0")), row, 0);
     m_disarmReasonValue = createValueLabel();
     statusLayout->addWidget(m_disarmReasonValue, row++, 1);
+    statusLayout->addWidget(new QLabel(QStringLiteral("Disarm detail")), row, 0);
+    m_disarmReasonDetailValue = createValueLabel();
+    m_disarmReasonDetailValue->setWordWrap(true);
+    statusLayout->addWidget(m_disarmReasonDetailValue, row++, 1);
     statusLayout->addWidget(new QLabel(zh("e8bdb4e78ab6e68081")), row, 0);
     m_axisStateValue = createValueLabel();
     statusLayout->addWidget(m_axisStateValue, row++, 1);
@@ -1411,6 +1853,175 @@ void MainWindow::buildAdvancedContent(QVBoxLayout *mainLayout, QWidget *parent)
     connect(m_clearErrorsButton, &QPushButton::clicked, this, [this]() {
         m_controller->clearErrors(false);
     });
+}
+
+void MainWindow::loadSettings()
+{
+    QSettings settings(appSettingsPath(), QSettings::IniFormat);
+
+    if (settings.contains(QStringLiteral("main/geometry"))) {
+        restoreGeometry(settings.value(QStringLiteral("main/geometry")).toByteArray());
+    }
+    if (m_advancedDialog && settings.contains(QStringLiteral("advanced/geometry"))) {
+        m_advancedDialog->restoreGeometry(settings.value(QStringLiteral("advanced/geometry")).toByteArray());
+    }
+
+    auto setComboByData = [](QComboBox *combo, const QVariant &value) {
+        if (!combo || !value.isValid()) {
+            return;
+        }
+        const int index = combo->findData(value);
+        if (index >= 0) {
+            combo->setCurrentIndex(index);
+        }
+    };
+
+    const QString savedInterfaceName = settings.value(QStringLiteral("comm/interface")).toString();
+    if (m_pluginCombo) {
+        m_pluginCombo->blockSignals(true);
+        setComboByData(m_pluginCombo, settings.value(QStringLiteral("comm/plugin")));
+        m_pluginCombo->blockSignals(false);
+    }
+    if (m_interfaceCombo) {
+        m_interfaceCombo->blockSignals(true);
+        if (!savedInterfaceName.isEmpty()) {
+            m_interfaceCombo->setEditText(savedInterfaceName);
+        }
+        m_interfaceCombo->blockSignals(false);
+    }
+    if (m_bitrateSpin) m_bitrateSpin->setValue(settings.value(QStringLiteral("comm/bitrate"), m_bitrateSpin->value()).toInt());
+    if (m_serialBaudSpin) m_serialBaudSpin->setValue(settings.value(QStringLiteral("comm/serial_baud"), m_serialBaudSpin->value()).toInt());
+    if (m_nodeIdSpin) m_nodeIdSpin->setValue(settings.value(QStringLiteral("comm/node_id"), m_nodeIdSpin->value()).toInt());
+    if (m_turnNodeIdSpin) m_turnNodeIdSpin->setValue(settings.value(QStringLiteral("mapping/turn_node"), m_turnNodeIdSpin->value()).toInt());
+    if (m_driveNodeIdSpin) m_driveNodeIdSpin->setValue(settings.value(QStringLiteral("mapping/drive_node"), m_driveNodeIdSpin->value()).toInt());
+    if (m_turnScaleSpin) m_turnScaleSpin->setValue(settings.value(QStringLiteral("mapping/turn_scale"), m_turnScaleSpin->value()).toDouble());
+    if (m_driveScaleSpin) m_driveScaleSpin->setValue(settings.value(QStringLiteral("mapping/drive_scale"), m_driveScaleSpin->value()).toDouble());
+
+    if (m_homeSpeedSpin) m_homeSpeedSpin->setValue(settings.value(QStringLiteral("motion/home_speed"), m_homeSpeedSpin->value()).toDouble());
+    if (m_jogSpeedSpin) m_jogSpeedSpin->setValue(settings.value(QStringLiteral("motion/jog_speed"), m_jogSpeedSpin->value()).toDouble());
+    if (m_scanAxisLengthSpin) m_scanAxisLengthSpin->setValue(settings.value(QStringLiteral("motion/scan_axis_length"), m_scanAxisLengthSpin->value()).toDouble());
+    if (m_scanSpeedSpin) m_scanSpeedSpin->setValue(settings.value(QStringLiteral("motion/scan_speed"), m_scanSpeedSpin->value()).toDouble());
+    if (m_stepAxisLengthSpin) m_stepAxisLengthSpin->setValue(settings.value(QStringLiteral("motion/step_axis_length"), m_stepAxisLengthSpin->value()).toDouble());
+    if (m_stepLengthSpin) m_stepLengthSpin->setValue(settings.value(QStringLiteral("motion/step_length"), m_stepLengthSpin->value()).toDouble());
+
+    setComboByData(m_scanModeCombo, settings.value(QStringLiteral("motion/scan_mode")));
+    setComboByData(m_controlModeCombo, settings.value(QStringLiteral("control/control_mode")));
+    setComboByData(m_inputModeCombo, settings.value(QStringLiteral("control/input_mode")));
+
+    if (m_positionSpin) m_positionSpin->setValue(settings.value(QStringLiteral("control/position"), m_positionSpin->value()).toDouble());
+    if (m_positionVelFfSpin) m_positionVelFfSpin->setValue(settings.value(QStringLiteral("control/position_vel_ff"), m_positionVelFfSpin->value()).toDouble());
+    if (m_positionTorqueFfSpin) m_positionTorqueFfSpin->setValue(settings.value(QStringLiteral("control/position_torque_ff"), m_positionTorqueFfSpin->value()).toDouble());
+    if (m_velocitySpin) m_velocitySpin->setValue(settings.value(QStringLiteral("control/velocity"), m_velocitySpin->value()).toDouble());
+    if (m_velocityTorqueFfSpin) m_velocityTorqueFfSpin->setValue(settings.value(QStringLiteral("control/velocity_torque_ff"), m_velocityTorqueFfSpin->value()).toDouble());
+    if (m_torqueSpin) m_torqueSpin->setValue(settings.value(QStringLiteral("control/torque"), m_torqueSpin->value()).toDouble());
+    if (m_velocityLimitSpin) m_velocityLimitSpin->setValue(settings.value(QStringLiteral("control/velocity_limit"), m_velocityLimitSpin->value()).toDouble());
+    if (m_currentLimitSpin) m_currentLimitSpin->setValue(settings.value(QStringLiteral("control/current_limit"), m_currentLimitSpin->value()).toDouble());
+
+    if (m_txIdEdit) m_txIdEdit->setText(settings.value(QStringLiteral("tx/id"), m_txIdEdit->text()).toString());
+    if (m_txDlcSpin) m_txDlcSpin->setValue(settings.value(QStringLiteral("tx/dlc"), m_txDlcSpin->value()).toInt());
+    for (int i = 0; i < m_txByteEdits.size(); ++i) {
+        QLineEdit *edit = m_txByteEdits.at(i);
+        if (edit) {
+            edit->setText(settings.value(QStringLiteral("tx/byte_%1").arg(i), edit->text()).toString());
+        }
+    }
+    if (m_txExtendedCheck) m_txExtendedCheck->setChecked(settings.value(QStringLiteral("tx/extended"), false).toBool());
+    if (m_txRemoteCheck) m_txRemoteCheck->setChecked(settings.value(QStringLiteral("tx/remote"), false).toBool());
+    if (m_txPeriodSpin) m_txPeriodSpin->setValue(settings.value(QStringLiteral("tx/period"), m_txPeriodSpin->value()).toInt());
+}
+
+void MainWindow::saveSettings() const
+{
+    QSettings settings(appSettingsPath(), QSettings::IniFormat);
+
+    settings.setValue(QStringLiteral("main/geometry"), saveGeometry());
+    if (m_advancedDialog) {
+        settings.setValue(QStringLiteral("advanced/geometry"), m_advancedDialog->saveGeometry());
+    }
+
+    if (m_pluginCombo) settings.setValue(QStringLiteral("comm/plugin"), currentPluginId(m_pluginCombo));
+    if (m_interfaceCombo) settings.setValue(QStringLiteral("comm/interface"), m_interfaceCombo->currentText().trimmed());
+    if (m_bitrateSpin) settings.setValue(QStringLiteral("comm/bitrate"), m_bitrateSpin->value());
+    if (m_serialBaudSpin) settings.setValue(QStringLiteral("comm/serial_baud"), m_serialBaudSpin->value());
+    if (m_nodeIdSpin) settings.setValue(QStringLiteral("comm/node_id"), m_nodeIdSpin->value());
+    if (m_turnNodeIdSpin) settings.setValue(QStringLiteral("mapping/turn_node"), m_turnNodeIdSpin->value());
+    if (m_driveNodeIdSpin) settings.setValue(QStringLiteral("mapping/drive_node"), m_driveNodeIdSpin->value());
+    if (m_turnScaleSpin) settings.setValue(QStringLiteral("mapping/turn_scale"), m_turnScaleSpin->value());
+    if (m_driveScaleSpin) settings.setValue(QStringLiteral("mapping/drive_scale"), m_driveScaleSpin->value());
+
+    if (m_homeSpeedSpin) settings.setValue(QStringLiteral("motion/home_speed"), m_homeSpeedSpin->value());
+    if (m_jogSpeedSpin) settings.setValue(QStringLiteral("motion/jog_speed"), m_jogSpeedSpin->value());
+    if (m_scanAxisLengthSpin) settings.setValue(QStringLiteral("motion/scan_axis_length"), m_scanAxisLengthSpin->value());
+    if (m_scanSpeedSpin) settings.setValue(QStringLiteral("motion/scan_speed"), m_scanSpeedSpin->value());
+    if (m_stepAxisLengthSpin) settings.setValue(QStringLiteral("motion/step_axis_length"), m_stepAxisLengthSpin->value());
+    if (m_stepLengthSpin) settings.setValue(QStringLiteral("motion/step_length"), m_stepLengthSpin->value());
+    if (m_scanModeCombo) settings.setValue(QStringLiteral("motion/scan_mode"), m_scanModeCombo->currentData());
+
+    if (m_controlModeCombo) settings.setValue(QStringLiteral("control/control_mode"), m_controlModeCombo->currentData());
+    if (m_inputModeCombo) settings.setValue(QStringLiteral("control/input_mode"), m_inputModeCombo->currentData());
+    if (m_positionSpin) settings.setValue(QStringLiteral("control/position"), m_positionSpin->value());
+    if (m_positionVelFfSpin) settings.setValue(QStringLiteral("control/position_vel_ff"), m_positionVelFfSpin->value());
+    if (m_positionTorqueFfSpin) settings.setValue(QStringLiteral("control/position_torque_ff"), m_positionTorqueFfSpin->value());
+    if (m_velocitySpin) settings.setValue(QStringLiteral("control/velocity"), m_velocitySpin->value());
+    if (m_velocityTorqueFfSpin) settings.setValue(QStringLiteral("control/velocity_torque_ff"), m_velocityTorqueFfSpin->value());
+    if (m_torqueSpin) settings.setValue(QStringLiteral("control/torque"), m_torqueSpin->value());
+    if (m_velocityLimitSpin) settings.setValue(QStringLiteral("control/velocity_limit"), m_velocityLimitSpin->value());
+    if (m_currentLimitSpin) settings.setValue(QStringLiteral("control/current_limit"), m_currentLimitSpin->value());
+
+    if (m_txIdEdit) settings.setValue(QStringLiteral("tx/id"), m_txIdEdit->text());
+    if (m_txDlcSpin) settings.setValue(QStringLiteral("tx/dlc"), m_txDlcSpin->value());
+    for (int i = 0; i < m_txByteEdits.size(); ++i) {
+        const QLineEdit *edit = m_txByteEdits.at(i);
+        if (edit) {
+            settings.setValue(QStringLiteral("tx/byte_%1").arg(i), edit->text());
+        }
+    }
+    if (m_txExtendedCheck) settings.setValue(QStringLiteral("tx/extended"), m_txExtendedCheck->isChecked());
+    if (m_txRemoteCheck) settings.setValue(QStringLiteral("tx/remote"), m_txRemoteCheck->isChecked());
+    if (m_txPeriodSpin) settings.setValue(QStringLiteral("tx/period"), m_txPeriodSpin->value());
+}
+
+void MainWindow::connectSettingsPersistence()
+{
+    const QList<QDoubleSpinBox *> doubleSpins = {
+        m_homeSpeedSpin, m_jogSpeedSpin, m_scanAxisLengthSpin, m_scanSpeedSpin,
+        m_stepAxisLengthSpin, m_stepLengthSpin, m_turnScaleSpin, m_driveScaleSpin,
+        m_positionSpin, m_positionVelFfSpin, m_positionTorqueFfSpin,
+        m_velocitySpin, m_velocityTorqueFfSpin, m_torqueSpin,
+        m_velocityLimitSpin, m_currentLimitSpin
+    };
+    for (QDoubleSpinBox *spin : doubleSpins) {
+        if (spin) connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double) { scheduleSaveSettings(); });
+    }
+
+    const QList<QSpinBox *> spins = {
+        m_bitrateSpin, m_serialBaudSpin, m_nodeIdSpin, m_turnNodeIdSpin,
+        m_driveNodeIdSpin, m_txDlcSpin, m_txPeriodSpin
+    };
+    for (QSpinBox *spin : spins) {
+        if (spin) connect(spin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { scheduleSaveSettings(); });
+    }
+
+    const QList<QComboBox *> combos = {
+        m_pluginCombo, m_interfaceCombo, m_scanModeCombo, m_controlModeCombo, m_inputModeCombo
+    };
+    for (QComboBox *combo : combos) {
+        if (combo) connect(combo, &QComboBox::currentTextChanged, this, [this](const QString &) { scheduleSaveSettings(); });
+    }
+
+    QList<QLineEdit *> edits;
+    edits << m_txIdEdit;
+    for (QLineEdit *edit : m_txByteEdits) {
+        edits << edit;
+    }
+    for (QLineEdit *edit : edits) {
+        if (edit) connect(edit, &QLineEdit::textChanged, this, [this](const QString &) { scheduleSaveSettings(); });
+    }
+
+    const QList<QCheckBox *> checks = { m_txExtendedCheck, m_txRemoteCheck };
+    for (QCheckBox *check : checks) {
+        if (check) connect(check, &QCheckBox::toggled, this, [this](bool) { scheduleSaveSettings(); });
+    }
 }
 
 void MainWindow::populatePlugins()

@@ -169,8 +169,8 @@ ODriveMotorController::ODriveMotorController(QObject *parent)
     : QObject(parent), m_device(nullptr), m_serialPort(nullptr), m_candleProcess(nullptr), m_nodeId(0), m_connected(false)
 {
     m_trackedNodeIds << m_nodeId;
-    m_pollTimer.setInterval(200);
-    connect(&m_pollTimer, &QTimer::timeout, this, &ODriveMotorController::requestTrackedTelemetry);
+    m_pollTimer.setInterval(800);
+    connect(&m_pollTimer, &QTimer::timeout, this, [this]() { requestTrackedTelemetry(true); });
     m_slcanReadTimer.setInterval(5);
     connect(&m_slcanReadTimer, &QTimer::timeout, this, &ODriveMotorController::readSlcanFrames);
 }
@@ -561,23 +561,23 @@ bool ODriveMotorController::estop(quint8 nodeId) { return sendFrame(nodeId, Esto
 bool ODriveMotorController::clearErrors(bool identify) { return clearErrors(m_nodeId, identify); }
 bool ODriveMotorController::clearErrors(quint8 nodeId, bool identify)
 {
-    QByteArray payload; payload.append(char(identify ? 1 : 0)); bool ok = sendFrame(nodeId, ClearErrors, payload); if (ok) requestAllTelemetry(nodeId); return ok;
+    QByteArray payload; payload.append(char(identify ? 1 : 0)); bool ok = sendFrame(nodeId, ClearErrors, payload); if (ok) requestAllTelemetry(nodeId, true); return ok;
 }
-void ODriveMotorController::requestAllTelemetry() { requestAllTelemetry(m_nodeId); }
-void ODriveMotorController::requestAllTelemetry(quint8 nodeId)
+void ODriveMotorController::requestAllTelemetry(bool quiet) { requestAllTelemetry(m_nodeId, quiet); }
+void ODriveMotorController::requestAllTelemetry(quint8 nodeId, bool quiet)
 {
-    requestRemoteFrame(nodeId, GetError); requestRemoteFrame(nodeId, GetEncoderEstimates); requestRemoteFrame(nodeId, GetIq);
-    requestRemoteFrame(nodeId, GetTemperature); requestRemoteFrame(nodeId, GetBusVoltageCurrent); requestRemoteFrame(nodeId, GetTorques); requestRemoteFrame(nodeId, GetPowers);
+    requestRemoteFrame(nodeId, GetError, quiet); requestRemoteFrame(nodeId, GetEncoderEstimates, quiet); requestRemoteFrame(nodeId, GetIq, quiet);
+    requestRemoteFrame(nodeId, GetTemperature, quiet); requestRemoteFrame(nodeId, GetBusVoltageCurrent, quiet); requestRemoteFrame(nodeId, GetTorques, quiet); requestRemoteFrame(nodeId, GetPowers, quiet);
 }
-void ODriveMotorController::requestTrackedTelemetry()
+void ODriveMotorController::requestTrackedTelemetry(bool quiet)
 {
-    for (quint8 nodeId : normalizeNodeIds(m_trackedNodeIds, m_nodeId)) requestAllTelemetry(nodeId);
+    for (quint8 nodeId : normalizeNodeIds(m_trackedNodeIds, m_nodeId)) requestAllTelemetry(nodeId, quiet);
 }
 
 void ODriveMotorController::probeNode(quint8 nodeId)
 {
-    requestRemoteFrame(nodeId, GetEncoderEstimates);
-    requestRemoteFrame(nodeId, GetBusVoltageCurrent);
+    requestRemoteFrame(nodeId, GetEncoderEstimates, true);
+    requestRemoteFrame(nodeId, GetBusVoltageCurrent, true);
 }
 
 void ODriveMotorController::probeAllNodes()
@@ -619,17 +619,13 @@ void ODriveMotorController::readFrames()
     while (m_device->framesAvailable() > 0) {
         const QCanBusFrame frame = m_device->readFrame();
         if (!frame.isValid() || frame.frameType() == QCanBusFrame::RemoteRequestFrame) continue;
-        const QString logLine = QStringLiteral("CAN RX DATA id=%1 dlc=%2 payload=%3")
-                .arg(formatCanId(frame.frameId()),
-                     QString::number(frame.payload().size()),
-                     formatPayload(frame.payload()));
-        const QString rxLine = QStringLiteral("CAN RX DATA id=%1 dlc=%2 ascii=%3")
-                .arg(formatCanId(frame.frameId()),
-                     QString::number(frame.payload().size()),
-                     formatAscii(frame.payload()));
-        emit logMessage(logLine);
-        emit rxMessage(rxLine);
-        processFrame(static_cast<quint8>((frame.frameId() >> 5) & 0x3F), frame.frameId(), frame.payload());
+        if (!processFrame(static_cast<quint8>((frame.frameId() >> 5) & 0x3F), frame.frameId(), frame.payload())) {
+            const QString rxLine = QStringLiteral("CAN RX DATA id=%1 dlc=%2 ascii=%3")
+                    .arg(formatCanId(frame.frameId()),
+                         QString::number(frame.payload().size()),
+                         formatAscii(frame.payload()));
+            emit rxMessage(rxLine);
+        }
     }
 }
 
@@ -642,9 +638,7 @@ void ODriveMotorController::readSlcanFrames()
     if (m_serialPort->bytesAvailable() > 0) {
         const QByteArray data = m_serialPort->readAll();
         m_slcanReadBuffer.append(data);
-        const QString logLine = QStringLiteral("SLCAN raw RX %1").arg(QString::fromLatin1(data.toHex(' ')).toUpper());
         const QString rxLine = QStringLiteral("SLCAN raw RX ascii=%1").arg(formatAscii(data));
-        emit logMessage(logLine);
         emit rxMessage(rxLine);
 
         if (!m_slcanProtocolMismatchWarned) {
@@ -735,15 +729,15 @@ not_connected:
     return true;
 }
 
-bool ODriveMotorController::requestRemoteFrame(quint8 nodeId, CommandId commandId)
+bool ODriveMotorController::requestRemoteFrame(quint8 nodeId, CommandId commandId, bool quiet)
 {
     if (isCandlePlugin()) {
         if (!isCandleConnected()) return false;
-        return candleWriteFrame(frameIdFor(nodeId, commandId), QByteArray(expectedReplyLength(commandId), '\0'), true, false, commandName(commandId), false);
+        return candleWriteFrame(frameIdFor(nodeId, commandId), QByteArray(expectedReplyLength(commandId), '\0'), true, quiet, commandName(commandId), false);
     }
     if (isSlcanPlugin()) {
         if (!isSlcanConnected()) return false;
-        return slcanWriteFrame(frameIdFor(nodeId, commandId), QByteArray(expectedReplyLength(commandId), '\0'), true, false, commandName(commandId), false);
+        return slcanWriteFrame(frameIdFor(nodeId, commandId), QByteArray(expectedReplyLength(commandId), '\0'), true, quiet, commandName(commandId), false);
     }
     if (!isCanBusConnected()) return false;
     QCanBusFrame frame(frameIdFor(nodeId, commandId), QByteArray(expectedReplyLength(commandId), '\0'));
@@ -765,12 +759,14 @@ bool ODriveMotorController::slcanWriteFrame(quint32 frameId, const QByteArray &p
         }
         return false;
     }
-    emit logMessage(QStringLiteral("SLCAN TX %1 id=%2 dlc=%3 payload=%4 raw=%5")
-                    .arg(remoteFrame ? QStringLiteral("RTR") : label,
-                         formatCanId(frameId),
-                         QString::number(payload.size()),
-                         formatPayload(payload),
-                         QString::fromLatin1(frame.trimmed())));
+    if (!quiet) {
+        emit logMessage(QStringLiteral("SLCAN TX %1 id=%2 dlc=%3 payload=%4 raw=%5")
+                        .arg(remoteFrame ? QStringLiteral("RTR") : label,
+                             formatCanId(frameId),
+                             QString::number(payload.size()),
+                             formatPayload(payload),
+                             QString::fromLatin1(frame.trimmed())));
+    }
     if (!slcanWriteRaw(frame, quiet)) {
         if (!quiet) {
             const QString msg = QStringLiteral("Failed to send %1 over SLCAN").arg(label);
@@ -790,11 +786,13 @@ bool ODriveMotorController::candleWriteFrame(quint32 frameId, const QByteArray &
     obj.insert(QStringLiteral("extended"), extendedFrame);
     obj.insert(QStringLiteral("data"), QString::fromLatin1(payload.toHex()));
 
-    emit logMessage(QStringLiteral("CANDLE TX %1 id=%2 dlc=%3 payload=%4")
-                    .arg(remoteFrame ? QStringLiteral("RTR") : label,
-                         formatCanId(frameId),
-                         QString::number(payload.size()),
-                         formatPayload(payload)));
+    if (!quiet) {
+        emit logMessage(QStringLiteral("CANDLE TX %1 id=%2 dlc=%3 payload=%4")
+                        .arg(remoteFrame ? QStringLiteral("RTR") : label,
+                             formatCanId(frameId),
+                             QString::number(payload.size()),
+                             formatPayload(payload)));
+    }
     return candleWriteCommand(QJsonDocument(obj).toJson(QJsonDocument::Compact) + '\n', quiet);
 }
 
@@ -980,20 +978,21 @@ bool ODriveMotorController::processSlcanLine(const QByteArray &line)
     bool ok = false; quint32 frameId = trimmedLine.mid(1, idLen).toUInt(&ok, 16); if (!ok) return false;
     int len = QString::fromLatin1(trimmedLine.mid(1 + idLen, 1)).toInt(&ok, 16); if (!ok || len < 0 || len > 8) return false;
     QByteArray payload; if (!remote) { payload = QByteArray::fromHex(trimmedLine.mid(1 + idLen + 1, len * 2)); if (payload.size() != len) return false; }
-    const QString logLine = QStringLiteral("SLCAN RX %1 id=%2 dlc=%3 payload=%4 raw=%5")
-            .arg(remote ? QStringLiteral("RTR") : QStringLiteral("DATA"),
-                 formatCanId(frameId),
-                 QString::number(len),
-                 formatPayload(payload),
-                 QString::fromLatin1(trimmedLine));
-    const QString rxLine = QStringLiteral("SLCAN RX %1 id=%2 dlc=%3 ascii=%4")
-            .arg(remote ? QStringLiteral("RTR") : QStringLiteral("DATA"),
-                 formatCanId(frameId),
-                 QString::number(len),
-                 formatAscii(payload));
-    emit logMessage(logLine);
-    emit rxMessage(rxLine);
-    if (!remote) processFrame(static_cast<quint8>((frameId >> 5) & 0x3F), frameId, payload);
+    if (remote) {
+        const QString rxLine = QStringLiteral("SLCAN RX RTR id=%1 dlc=%2 ascii=%3")
+                .arg(formatCanId(frameId),
+                     QString::number(len),
+                     formatAscii(payload));
+        emit rxMessage(rxLine);
+        return true;
+    }
+    if (!processFrame(static_cast<quint8>((frameId >> 5) & 0x3F), frameId, payload)) {
+        const QString rxLine = QStringLiteral("SLCAN RX DATA id=%1 dlc=%2 ascii=%3")
+                .arg(formatCanId(frameId),
+                     QString::number(len),
+                     formatAscii(payload));
+        emit rxMessage(rxLine);
+    }
     return true;
 }
 
@@ -1032,20 +1031,20 @@ bool ODriveMotorController::processCandleLine(const QByteArray &line)
         const quint32 frameId = static_cast<quint32>(obj.value(QStringLiteral("id")).toInt());
         const QByteArray payload = QByteArray::fromHex(obj.value(QStringLiteral("data")).toString().toLatin1());
         const bool remote = obj.value(QStringLiteral("remote")).toBool(false);
-        const QString logLine = QStringLiteral("CANDLE RX %1 id=%2 dlc=%3 payload=%4")
-                .arg(remote ? QStringLiteral("RTR") : QStringLiteral("DATA"),
-                     formatCanId(frameId),
-                     QString::number(payload.size()),
-                     formatPayload(payload));
-        const QString rxLine = QStringLiteral("CANDLE RX %1 id=%2 dlc=%3 ascii=%4")
-                .arg(remote ? QStringLiteral("RTR") : QStringLiteral("DATA"),
-                     formatCanId(frameId),
-                     QString::number(payload.size()),
-                     formatAscii(payload));
-        emit logMessage(logLine);
-        emit rxMessage(rxLine);
-        if (!remote) {
-            processFrame(static_cast<quint8>((frameId >> 5) & 0x3F), frameId, payload);
+        if (remote) {
+            const QString rxLine = QStringLiteral("CANDLE RX RTR id=%1 dlc=%2 ascii=%3")
+                    .arg(formatCanId(frameId),
+                         QString::number(payload.size()),
+                         formatAscii(payload));
+            emit rxMessage(rxLine);
+            return true;
+        }
+        if (!processFrame(static_cast<quint8>((frameId >> 5) & 0x3F), frameId, payload)) {
+            const QString rxLine = QStringLiteral("CANDLE RX DATA id=%1 dlc=%2 ascii=%3")
+                    .arg(formatCanId(frameId),
+                         QString::number(payload.size()),
+                         formatAscii(payload));
+            emit rxMessage(rxLine);
         }
         return true;
     }
@@ -1054,7 +1053,7 @@ bool ODriveMotorController::processCandleLine(const QByteArray &line)
     return true;
 }
 
-void ODriveMotorController::processFrame(quint8 nodeId, quint32 frameId, const QByteArray &payload)
+bool ODriveMotorController::processFrame(quint8 nodeId, quint32 frameId, const QByteArray &payload)
 {
     quint32 commandId = frameId & 0x1F;
     AxisStatus &s = m_statusByNode[nodeId];
@@ -1152,12 +1151,13 @@ void ODriveMotorController::processFrame(quint8 nodeId, quint32 frameId, const Q
                          QString::number(s.mechanicalPowerWatts, 'f', 2));
         }
         break;
-    default: return;
+    default: return false;
     }
     if (!summary.isEmpty()) {
         emit rxMessage(summary);
     }
     emit nodeStatusUpdated(nodeId); emit statusUpdated();
+    return true;
 }
 
 quint32 ODriveMotorController::frameIdFor(quint8 nodeId, CommandId commandId) const { return (quint32(nodeId & 0x3F) << 5) | quint32(commandId); }

@@ -1,0 +1,3 @@
+odrv0.axis0.motor.is_calibrated
+odrv0.axis0.encoder.is_ready
+odrv0.axis0.requested_state = 3

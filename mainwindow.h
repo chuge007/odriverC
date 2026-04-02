@@ -2,16 +2,19 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QVector>
+#include <QStringList>
 
 class QComboBox;
 class QDialog;
 class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
+class QPlainTextEdit;
 class QPushButton;
 class QSpinBox;
-class QTextEdit;
 class QCheckBox;
+class QTimer;
 class QVBoxLayout;
 class ODriveMotorController;
 
@@ -56,6 +59,15 @@ private slots:
     void stopProgram();
     void stepAdvanceOnce();
     void handleNodeStatusUpdate(quint8 nodeId);
+    void flushQueuedMessages();
+    void flushQueuedRxMessages();
+    void scheduleStatusPanelUpdate();
+    void scheduleSaveSettings();
+    void handleCustomTxRxMessage(const QString &message);
+    void handleCustomTxResponseTimeout();
+    void scanForActiveNodes();
+    void updateDetectedNodesList();
+    void switchToDetectedNode(quint8 nodeId);
 
 private:
     enum ScanModeOption {
@@ -89,6 +101,9 @@ private:
     void populatePlugins();
     void populateControlModes();
     void populateInputModes();
+    void loadSettings();
+    void saveSettings() const;
+    void connectSettingsPersistence();
     void setMotionControlsEnabled(bool enabled);
     void updateTrackedNodes();
     void syncConnectionEditorsFromAdvanced();
@@ -134,6 +149,9 @@ private:
     QLineEdit *m_ipEdit;
 
     QPushButton *m_openAdvancedButton;
+    QComboBox *m_detectedNodesCombo;
+    QPushButton *m_rescanNodesButton;
+    QLabel *m_activeNodesLabel;
     QLabel *m_turnPositionLabel;
     QLabel *m_drivePositionLabel;
     QPushButton *m_setZeroButton;
@@ -189,8 +207,11 @@ private:
     QPushButton *m_applyLimitsButton;
 
     QLabel *m_axisErrorValue;
+    QLabel *m_axisErrorDetailValue;
     QLabel *m_activeErrorsValue;
+    QLabel *m_activeErrorsDetailValue;
     QLabel *m_disarmReasonValue;
+    QLabel *m_disarmReasonDetailValue;
     QLabel *m_axisStateValue;
     QLabel *m_procedureResultValue;
     QLabel *m_trajectoryDoneValue;
@@ -204,18 +225,32 @@ private:
     QLabel *m_powerValue;
     QLabel *m_lastUpdateValue;
 
-    QTextEdit *m_logEdit;
-    QTextEdit *m_rxEdit;
+    QPlainTextEdit *m_logEdit;
+    QPlainTextEdit *m_rxEdit;
 
     QLineEdit *m_txIdEdit;
     QSpinBox *m_txDlcSpin;
-    QLineEdit *m_txDataEdit;
     QCheckBox *m_txExtendedCheck;
     QCheckBox *m_txRemoteCheck;
     QSpinBox *m_txPeriodSpin;
     QPushButton *m_txSendButton;
     QPushButton *m_txToggleButton;
+    QLabel *m_txStatusLabel;
+    QCheckBox *m_txErrorCheck;
+    QVector<QLineEdit *> m_txByteEdits;
     QTimer *m_txTimer;
+    QTimer *m_txResponseTimer;
+    QTimer *m_logFlushTimer;
+    QTimer *m_rxFlushTimer;
+    QTimer *m_statusUpdateTimer;
+    QTimer *m_settingsSaveTimer;
+    QStringList m_pendingLogLines;
+    QStringList m_pendingRxLines;
+    QString m_lastLogMessage;
+    QString m_lastRxMessage;
+    quint32 m_lastTxFrameId;
+    quint8 m_lastTxNodeId;
+    bool m_waitingForTxResponse;
 
     double m_turnZeroTurns;
     double m_driveZeroTurns;
