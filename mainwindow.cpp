@@ -12,6 +12,7 @@
 #include <QDoubleSpinBox>
 #include <QDir>
 #include <QFrame>
+#include <QGuiApplication>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -23,13 +24,17 @@
 #include <QPushButton>
 #include <QCheckBox>
 #include <QRegularExpression>
+#include <QScrollArea>
+#include <QScreen>
 #include <QSettings>
 #include <QStringList>
 #include <QSpinBox>
 #include <QTextDocument>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QWidget>
 #include <QtGlobal>
+#include <algorithm>
 
 namespace {
 
@@ -244,10 +249,8 @@ MainWindow::MainWindow(QWidget *parent)
       m_settingsSaveTimer(nullptr),
       m_lastTxFrameId(0),
       m_lastTxNodeId(0),
-      m_waitingForTxResponse(false),
-      m_turnZeroTurns(0.0),
-      m_driveZeroTurns(0.0),
-      m_zeroPointInitialized(false)
+      m_lastTxBoardIndex(-1),
+      m_waitingForTxResponse(false)
 {
     ui->setupUi(this);
     buildUi();
@@ -261,21 +264,6 @@ MainWindow::MainWindow(QWidget *parent)
     updateStatusPanel();
     syncAxisReadouts();
     connectSettingsPersistence();
-
-    connect(m_controller, &ODriveMotorController::connectionChanged,
-            this, &MainWindow::updateConnectionState);
-    connect(m_controller, &ODriveMotorController::statusUpdated,
-            this, &MainWindow::scheduleStatusPanelUpdate);
-    connect(m_controller, &ODriveMotorController::nodeStatusUpdated,
-            this, &MainWindow::handleNodeStatusUpdate);
-    connect(m_controller, &ODriveMotorController::logMessage,
-            this, &MainWindow::appendLog);
-    connect(m_controller, &ODriveMotorController::rxMessage,
-            this, &MainWindow::appendRxMessage);
-    connect(m_controller, &ODriveMotorController::rxMessage,
-            this, &MainWindow::handleCustomTxRxMessage);
-    connect(m_controller, &ODriveMotorController::errorMessage,
-            this, &MainWindow::appendLog);
 
     QTimer *uiStateTimer = new QTimer(this);
     uiStateTimer->setInterval(500);
@@ -296,12 +284,11 @@ MainWindow::~MainWindow()
 void MainWindow::refreshCanInterfaces()
 {
     const QString plugin = currentPluginId(m_pluginCombo);
-    const QString previousInterface = m_interfaceCombo->currentText().trimmed();
     QString errorMessage;
     QStringList interfaces;
 
     qInfo().noquote() << "Refreshing CAN interfaces. plugin=" << plugin
-                      << " previousInterface=" << previousInterface;
+                      << " configuredBoards=" << connectedInterfaceCount();
 
     if (plugin == QStringLiteral("systeccan") && !checkSystemCanDriver(&errorMessage)) {
         interfaces.clear();
@@ -312,15 +299,8 @@ void MainWindow::refreshCanInterfaces()
     qInfo().noquote() << "Refresh result. plugin=" << plugin
                       << " interfaces=" << interfaces.join(QStringLiteral(", "))
                       << " error=" << errorMessage;
-
-    m_interfaceCombo->blockSignals(true);
-    m_interfaceCombo->clear();
-    m_interfaceCombo->addItems(interfaces);
-    m_interfaceCombo->setEditText(previousInterface);
-    if (!interfaces.isEmpty() && previousInterface.isEmpty()) {
-        m_interfaceCombo->setCurrentIndex(0);
-    }
-    m_interfaceCombo->blockSignals(false);
+    m_availableInterfaces = interfaces;
+    refreshBoardInterfaceOptions();
 
     if (!errorMessage.isEmpty()) {
         appendLog(zh("e588b7e696b0e68ea5e58fa3e58897e8a1a8e68f90e7a4ba3a20253120285b25325d29")
@@ -337,14 +317,12 @@ void MainWindow::refreshCanInterfaces()
 
 void MainWindow::toggleConnection()
 {
-    if (m_controller->isConnected()) {
+    if (hasAnyConnectedBoard()) {
         qInfo() << "Disconnect requested from UI";
         stopProgram();
-        m_controller->disconnectDevice();
+        disconnectAllBoards();
         return;
     }
-
-    updateTrackedNodes();
 
     if (currentPluginId(m_pluginCombo) == QStringLiteral("virtualcan")) {
         appendLog(zh("e5bd93e5898de4bdbfe794a8e8999ae68b9f2043414eefbc8ce680bbe7babfe695b0e68daee4bb85e69da5e887aae7a88be5ba8fe887aae8baabe38082"));
@@ -361,62 +339,109 @@ void MainWindow::toggleConnection()
         }
     }
 
-    qInfo().noquote() << "Connect requested. plugin=" << currentPluginId(m_pluginCombo)
-                      << " interface=" << m_interfaceCombo->currentText().trimmed()
-                      << " bitrate=" << m_bitrateSpin->value()
-                      << " nodeId=" << m_nodeIdSpin->value();
-
-    const bool connected = m_controller->connectDevice(currentPluginId(m_pluginCombo),
-                                                       m_interfaceCombo->currentText().trimmed(),
-                                                       m_bitrateSpin->value(),
-                                                       m_serialBaudSpin->value(),
-                                                       static_cast<quint8>(m_nodeIdSpin->value()));
-    qInfo() << "connectDevice returned" << connected;
-    if (connected) {
-        updateTrackedNodes();
-        updateProgramStatus(zh("e8bf9ee68ea5e68890e58a9fefbc8ce58786e5a487e68ea7e588b6e8bdace8bdaee5928ce9a9b1e8bdae"));
-        m_controller->requestTrackedTelemetry();
-        updateLinkStatusDisplay();
-        QTimer::singleShot(1500, this, [this]() {
-            updateLinkStatusDisplay();
-            if (!m_controller->isConnected() || hasFreshTrackedHeartbeat()) {
-                return;
-            }
-
-            appendLog(QStringLiteral("CAN adapter connected, but no ODrive heartbeat (0x01) was received within 1.5 s. Check bitrate, node ID, wiring, and power."));
-            updateProgramStatus(QStringLiteral("CAN connected, but no ODrive heartbeat"));
-            m_controller->probeAllNodes();
-            QTimer::singleShot(600, this, [this]() {
-                if (!m_controller->isConnected()) {
-                    return;
-                }
-
-                const QList<quint8> responsiveNodeIds = m_controller->recentResponsiveNodeIds(1500);
-                if (responsiveNodeIds.isEmpty()) {
-                    appendLog(QStringLiteral("Probe result: no ODrive reply was seen on nodes 0..63. This usually means CAN bitrate mismatch, no bus power, wiring/termination issue, or the adapter is not actually on CAN mode."));
-                    return;
-                }
-
-                QStringList nodeStrings;
-                for (const quint8 nodeId : responsiveNodeIds) {
-                    nodeStrings << QString::number(nodeId);
-                }
-                appendLog(QStringLiteral("Probe result: received ODrive replies from node(s): %1").arg(nodeStrings.join(QStringLiteral(", "))));
-            });
-        });
+    const QList<int> boardIndices = configuredBoardIndices();
+    if (boardIndices.isEmpty()) {
+        appendLog(QStringLiteral("No board interfaces are configured in Advanced."));
+        updateProgramStatus(QStringLiteral("No configured interfaces"));
+        return;
     }
+
+    QStringList selectedInterfaces;
+    for (const int boardIndex : boardIndices) {
+        const QString interfaceName = boardInterfaceName(boardIndex);
+        if (interfaceName.isEmpty()) {
+            continue;
+        }
+        if (selectedInterfaces.contains(interfaceName)) {
+            appendLog(QStringLiteral("Duplicate interface selected: %1").arg(interfaceName));
+            updateProgramStatus(QStringLiteral("Duplicate interface selection"));
+            return;
+        }
+        selectedInterfaces << interfaceName;
+    }
+
+    bool anyConnected = false;
+    const QString plugin = currentPluginId(m_pluginCombo);
+    for (const int boardIndex : boardIndices) {
+        const QString interfaceName = boardInterfaceName(boardIndex);
+        if (interfaceName.isEmpty()) {
+            continue;
+        }
+
+        ODriveMotorController *controller = new ODriveMotorController(this);
+        connectBoardControllerSignals(boardIndex, controller);
+
+        BoardRuntime &runtime = m_boardRuntimes[boardIndex];
+        runtime.controller = controller;
+        runtime.connected = false;
+
+        const quint8 defaultNode = boardTurnNodeId(boardIndex);
+        qInfo().noquote() << "Connect requested. board=" << boardIndex
+                          << " plugin=" << plugin
+                          << " interface=" << interfaceName
+                          << " bitrate=" << m_bitrateSpin->value()
+                          << " defaultNode=" << int(defaultNode);
+
+        if (!controller->connectDevice(plugin,
+                                       interfaceName,
+                                       m_bitrateSpin->value(),
+                                       m_serialBaudSpin->value(),
+                                       defaultNode)) {
+            appendLog(QStringLiteral("%1 connect failed").arg(boardLogPrefix(boardIndex)));
+            controller->deleteLater();
+            runtime.controller = nullptr;
+            continue;
+        }
+
+        runtime.connected = true;
+        runtime.detectedNodes = m_boardConfigRows[boardIndex].detectedNodes;
+        controller->setDefaultNodeId(defaultNode);
+        controller->setTrackedNodeIds({boardTurnNodeId(boardIndex), boardDriveNodeId(boardIndex)});
+        controller->requestTrackedTelemetry();
+        anyConnected = true;
+        updateBoardStatusLabel(boardIndex, zh("e5b7b2e8bf9ee68ea5"));
+        QTimer::singleShot(300, this, [this, boardIndex]() { refreshBoardNodes(boardIndex, false); });
+    }
+
+    if (!anyConnected) {
+        updateProgramStatus(QStringLiteral("No boards connected"));
+        updateConnectionState(false);
+        return;
+    }
+
+    updateProgramStatus(zh("e8bf9ee68ea5e68890e58a9fefbc8ce58786e5a487e68ea7e588b6e5a49ae59d97e69dbfe58da1"));
+    updateConnectionStateFromBoards();
+    updateDebugBoardCombo();
+    updateDebugNodeCombo();
+    updateLinkStatusDisplay();
 }
 
 void MainWindow::updateConnectionState(bool connected)
 {
     m_connectButton->setText(connected ? QStringLiteral("disconnect") : QStringLiteral("connect"));
+    if (m_advancedConnectButton) {
+        m_advancedConnectButton->setText(connected ? QStringLiteral("disconnect") : QStringLiteral("connect"));
+    }
 
     m_pluginCombo->setEnabled(!connected);
-    m_interfaceCombo->setEnabled(!connected);
     m_bitrateSpin->setEnabled(!connected);
+    if (m_interfaceCountCombo) {
+        m_interfaceCountCombo->setEnabled(!connected);
+    }
     m_refreshInterfacesButton->setEnabled(!connected);
     m_ipEdit->setEnabled(!connected);
     m_openAdvancedButton->setEnabled(true);
+    if (m_rescanNodesButton) {
+        m_rescanNodesButton->setEnabled(connected);
+    }
+    for (BoardConfigRow &row : m_boardConfigRows) {
+        if (row.interfaceCombo) row.interfaceCombo->setEnabled(!connected && row.rowWidget && row.rowWidget->isVisible());
+        if (row.scanNodesButton) row.scanNodesButton->setEnabled(row.rowWidget && row.rowWidget->isVisible());
+        if (row.turnNodeCombo) row.turnNodeCombo->setEnabled(!connected && row.rowWidget && row.rowWidget->isVisible());
+        if (row.driveNodeCombo) row.driveNodeCombo->setEnabled(!connected && row.rowWidget && row.rowWidget->isVisible());
+        if (row.turnScaleSpin) row.turnScaleSpin->setEnabled(!connected && row.rowWidget && row.rowWidget->isVisible());
+        if (row.driveScaleSpin) row.driveScaleSpin->setEnabled(!connected && row.rowWidget && row.rowWidget->isVisible());
+    }
     setMotionControlsEnabled(connected);
 
     if (!connected) {
@@ -436,6 +461,13 @@ void MainWindow::updateConnectionState(bool connected)
             m_txStatusLabel->setStyleSheet(QStringLiteral("QLabel { color: #666666; font-weight: 600; }"));
         }
         updateProgramStatus(zh("e8afb7e58588e8bf9ee68ea5204f4472697665"));
+        if (m_debugNodeCombo) {
+            m_debugNodeCombo->clear();
+            m_debugNodeCombo->setEnabled(false);
+        }
+        if (m_activeNodesLabel) {
+            m_activeNodesLabel->setText(zh("e6a380e6b58be588b0e79a84e88a82e782b93a202d2d"));
+        }
         syncAxisReadouts();
         updateStatusPanel();
     }
@@ -446,13 +478,38 @@ void MainWindow::updateConnectionState(bool connected)
 
 void MainWindow::updateStatusPanel()
 {
-    const ODriveMotorController::AxisStatus &status = m_controller->status();
+    ODriveMotorController *controller = currentDebugController();
+    const quint8 nodeId = currentDebugNodeId();
 
     auto formatHex = [](quint32 value) {
         return QStringLiteral("0x%1").arg(value, 8, 16, QLatin1Char('0')).toUpper();
     };
 
-    if (!m_controller->isConnected() || !status.lastMessage.isValid()) {
+    if (!controller || !controller->isConnected()) {
+        const QString placeholder = QStringLiteral("--");
+        m_axisErrorValue->setText(placeholder);
+        m_axisErrorDetailValue->setText(placeholder);
+        m_activeErrorsValue->setText(placeholder);
+        m_activeErrorsDetailValue->setText(placeholder);
+        m_disarmReasonValue->setText(placeholder);
+        m_disarmReasonDetailValue->setText(placeholder);
+        m_axisStateValue->setText(placeholder);
+        m_procedureResultValue->setText(placeholder);
+        m_trajectoryDoneValue->setText(placeholder);
+        m_positionValue->setText(placeholder);
+        m_velocityValue->setText(placeholder);
+        m_busVoltageValue->setText(placeholder);
+        m_busCurrentValue->setText(placeholder);
+        m_iqValue->setText(placeholder);
+        m_temperatureValue->setText(placeholder);
+        m_torqueValue->setText(placeholder);
+        m_powerValue->setText(placeholder);
+        m_lastUpdateValue->setText(placeholder);
+        return;
+    }
+
+    const ODriveMotorController::AxisStatus &status = controller->status(nodeId);
+    if (!status.lastMessage.isValid()) {
         const QString placeholder = QStringLiteral("--");
         m_axisErrorValue->setText(placeholder);
         m_axisErrorDetailValue->setText(placeholder);
@@ -626,7 +683,9 @@ static bool parseTxByteText(const QString &text, char *outByte)
 
 void MainWindow::sendCustomTxOnce()
 {
-    if (!m_controller || !m_controller->isConnected()) {
+    ODriveMotorController *controller = currentDebugController();
+    const int boardIndex = currentDebugBoardIndex();
+    if (!controller || !controller->isConnected()) {
         appendLog(QStringLiteral("Transmit: not connected"));
         if (m_txStatusLabel) {
             m_txStatusLabel->setText(QStringLiteral("Status: not connected"));
@@ -689,7 +748,7 @@ void MainWindow::sendCustomTxOnce()
         }
     }
 
-    if (!m_controller->sendRawCanFrame(frameId, payload, extended, remote, false)) {
+    if (!controller->sendRawCanFrame(frameId, payload, extended, remote, false)) {
         appendLog(QStringLiteral("Transmit: send failed"));
         if (m_txStatusLabel) {
             m_txStatusLabel->setText(QStringLiteral("Status: send failed"));
@@ -704,6 +763,7 @@ void MainWindow::sendCustomTxOnce()
 
     m_lastTxFrameId = frameId;
     m_lastTxNodeId = static_cast<quint8>((frameId >> 5) & 0x3F);
+    m_lastTxBoardIndex = boardIndex;
     m_waitingForTxResponse = true;
     if (m_txStatusLabel) {
         m_txStatusLabel->setText(QStringLiteral("Status: sent, waiting for reply"));
@@ -745,6 +805,12 @@ void MainWindow::handleCustomTxRxMessage(const QString &message)
     }
 
     const QString upperMessage = message.toUpper();
+    if (m_lastTxBoardIndex >= 0) {
+        const QString boardToken = boardLogPrefix(m_lastTxBoardIndex).toUpper();
+        if (!upperMessage.contains(boardToken.toUpper())) {
+            return;
+        }
+    }
     const QString frameIdToken = QStringLiteral("ID=%1")
             .arg(QStringLiteral("0X%1").arg(m_lastTxFrameId, 3, 16, QLatin1Char('0')).toUpper());
     const QString nodeToken = QStringLiteral("NODE=%1").arg(m_lastTxNodeId);
@@ -774,87 +840,88 @@ void MainWindow::handleCustomTxResponseTimeout()
 
 void MainWindow::scanForActiveNodes()
 {
-    if (!m_controller->isConnected()) {
+    if (!m_debugNodeCombo || !m_activeNodesLabel) {
         return;
     }
-
-    appendLog(zh("e6ada3e59ca8e689abe68f8fe6b4bbe8b783e79a84204f4472697652020e88a82e782b9e280a6"));
-    m_detectedNodesCombo->clear();
-    m_detectedNodesCombo->setEnabled(false);
-    m_controller->probeAllNodes();
-    QTimer::singleShot(1500, this, &MainWindow::updateDetectedNodesList);
+    refreshCurrentBoardNodes();
 }
 
 void MainWindow::updateDetectedNodesList()
 {
-    if (!m_controller->isConnected()) {
+    const int boardIndex = currentDebugBoardIndex();
+    if (boardIndex < 0 || boardIndex >= m_boardConfigRows.size() || !m_debugNodeCombo || !m_activeNodesLabel) {
         return;
     }
 
-    const QList<quint8> activeNodes = m_controller->recentResponsiveNodeIds(2000);
-    
-    m_detectedNodesCombo->clear();
+    const QList<quint8> activeNodes = m_boardConfigRows[boardIndex].detectedNodes;
+
+    m_debugNodeCombo->clear();
     if (activeNodes.isEmpty()) {
+        m_debugNodeCombo->setEnabled(false);
         m_activeNodesLabel->setText(zh("e6a380e6b58be588b0e79a84e88a82e782b9320e697a0"));
-        appendLog(zh("e69cae6a380e6b58be588b0e4bbe4bd95204f44726976652020e88a82e782b9e5938de5ba94"));
         return;
     }
 
     for (quint8 nodeId : activeNodes) {
         const QString nodeText = QStringLiteral("Node %1").arg(nodeId);
-        m_detectedNodesCombo->addItem(nodeText, nodeId);
+        m_debugNodeCombo->addItem(nodeText, nodeId);
     }
-    
-    m_detectedNodesCombo->setEnabled(true);
+
+    m_debugNodeCombo->setEnabled(true);
     QStringList nodeStrings;
     for (quint8 nodeId : activeNodes) {
         nodeStrings << QString::number(nodeId);
     }
     m_activeNodesLabel->setText(QStringLiteral("%1: %2").arg(zh("e6a380e6b58be588b0e79a84e88a82e782b9"), nodeStrings.join(", ")));
-    appendLog(QStringLiteral("%1 %2 %3: %4")
-              .arg(zh("e6a380e6b58be588b0"))
-              .arg(QString::number(activeNodes.size()))
-              .arg(zh("e4b8ae6b4bbe8b783e88a82e782b9"))
-              .arg(nodeStrings.join(", ")));
-    const int currentNodeIndex = m_detectedNodesCombo->findData(m_nodeIdSpin->value());
+    const int currentNodeIndex = m_debugNodeCombo->findData(currentDebugNodeId());
     if (currentNodeIndex >= 0) {
-        m_detectedNodesCombo->setCurrentIndex(currentNodeIndex);
+        m_debugNodeCombo->setCurrentIndex(currentNodeIndex);
     } else if (!activeNodes.isEmpty()) {
-        m_detectedNodesCombo->setCurrentIndex(0);
+        m_debugNodeCombo->setCurrentIndex(0);
         switchToDetectedNode(activeNodes.first());
     }
 }
 
 void MainWindow::switchToDetectedNode(quint8 nodeId)
 {
-    if (m_nodeIdSpin) {
-        m_nodeIdSpin->setValue(nodeId);
+    if (m_debugNodeCombo) {
+        const int index = m_debugNodeCombo->findData(nodeId);
+        if (index >= 0 && m_debugNodeCombo->currentIndex() != index) {
+            m_debugNodeCombo->setCurrentIndex(index);
+        }
     }
-    m_controller->setDefaultNodeId(nodeId);
-    updateTrackedNodes();
-    m_controller->requestTrackedTelemetry();
+    updateDebugScaleSpin();
+    refreshTelemetry();
     appendLog(QStringLiteral("%1 Node %2").arg(zh("e5b7b2e5887e68da2e588b0"), QString::number(nodeId)));
     updateProgramStatus(QStringLiteral("%1: %2").arg(zh("e5bd93e5898de68ea7e588b688a82e782b9"), QString::number(nodeId)));
 }
 
 void MainWindow::requestIdle()
 {
-    m_controller->requestIdle();
+    if (ODriveMotorController *controller = currentDebugController()) {
+        controller->requestIdle(currentDebugNodeId());
+    }
 }
 
 void MainWindow::requestMotorCalibration()
 {
-    m_controller->requestMotorCalibration();
+    if (ODriveMotorController *controller = currentDebugController()) {
+        controller->requestMotorCalibration(currentDebugNodeId());
+    }
 }
 
 void MainWindow::requestFullCalibration()
 {
-    m_controller->requestFullCalibration();
+    if (ODriveMotorController *controller = currentDebugController()) {
+        controller->requestFullCalibration(currentDebugNodeId());
+    }
 }
 
 void MainWindow::requestClosedLoop()
 {
-    m_controller->requestClosedLoop();
+    if (ODriveMotorController *controller = currentDebugController()) {
+        controller->requestClosedLoop(currentDebugNodeId());
+    }
 }
 
 void MainWindow::applyControllerMode()
@@ -863,46 +930,67 @@ void MainWindow::applyControllerMode()
             static_cast<ODriveMotorController::ControlMode>(m_controlModeCombo->currentData().toInt());
     const ODriveMotorController::InputMode inputMode =
             static_cast<ODriveMotorController::InputMode>(m_inputModeCombo->currentData().toInt());
-    m_controller->setControllerMode(controlMode, inputMode);
+    if (ODriveMotorController *controller = currentDebugController()) {
+        controller->setControllerMode(currentDebugNodeId(), controlMode, inputMode);
+    }
 }
 
 void MainWindow::sendPositionCommand()
 {
+    ODriveMotorController *controller = currentDebugController();
+    if (!controller) {
+        return;
+    }
     const ODriveMotorController::InputMode inputMode =
             static_cast<ODriveMotorController::InputMode>(m_inputModeCombo->currentData().toInt());
-    m_controller->setControllerMode(ODriveMotorController::PositionControl, inputMode);
-    m_controller->setPosition(static_cast<float>(m_positionSpin->value()),
-                              static_cast<float>(m_positionVelFfSpin->value()),
-                              static_cast<float>(m_positionTorqueFfSpin->value()));
+    controller->setControllerMode(currentDebugNodeId(), ODriveMotorController::PositionControl, inputMode);
+    controller->setPosition(currentDebugNodeId(),
+                            static_cast<float>(m_positionSpin->value()),
+                            static_cast<float>(m_positionVelFfSpin->value()),
+                            static_cast<float>(m_positionTorqueFfSpin->value()));
 }
 
 void MainWindow::sendVelocityCommand()
 {
+    ODriveMotorController *controller = currentDebugController();
+    if (!controller) {
+        return;
+    }
     const ODriveMotorController::InputMode inputMode =
             static_cast<ODriveMotorController::InputMode>(m_inputModeCombo->currentData().toInt());
-    m_controller->setControllerMode(ODriveMotorController::VelocityControl, inputMode);
-    m_controller->setVelocity(static_cast<float>(m_velocitySpin->value()),
-                              static_cast<float>(m_velocityTorqueFfSpin->value()));
+    controller->setControllerMode(currentDebugNodeId(), ODriveMotorController::VelocityControl, inputMode);
+    controller->setVelocity(currentDebugNodeId(),
+                            static_cast<float>(m_velocitySpin->value()),
+                            static_cast<float>(m_velocityTorqueFfSpin->value()));
 }
 
 void MainWindow::sendTorqueCommand()
 {
+    ODriveMotorController *controller = currentDebugController();
+    if (!controller) {
+        return;
+    }
     const ODriveMotorController::InputMode inputMode =
             static_cast<ODriveMotorController::InputMode>(m_inputModeCombo->currentData().toInt());
-    m_controller->setControllerMode(ODriveMotorController::TorqueControl, inputMode);
-    m_controller->setTorque(static_cast<float>(m_torqueSpin->value()));
+    controller->setControllerMode(currentDebugNodeId(), ODriveMotorController::TorqueControl, inputMode);
+    controller->setTorque(currentDebugNodeId(), static_cast<float>(m_torqueSpin->value()));
 }
 
 void MainWindow::applyLimits()
 {
-    m_controller->setLimits(static_cast<float>(m_velocityLimitSpin->value()),
-                            static_cast<float>(m_currentLimitSpin->value()));
+    if (ODriveMotorController *controller = currentDebugController()) {
+        controller->setLimits(currentDebugNodeId(),
+                              static_cast<float>(m_velocityLimitSpin->value()),
+                              static_cast<float>(m_currentLimitSpin->value()));
+    }
 }
 
 void MainWindow::refreshTelemetry()
 {
     appendLog(zh("e5b7b2e4b8bbe58aa8e588b7e696b0e78ab6e68081"));
-    m_controller->requestTrackedTelemetry();
+    if (ODriveMotorController *controller = currentDebugController()) {
+        controller->requestAllTelemetry(currentDebugNodeId(), true);
+    }
 }
 
 void MainWindow::openAdvancedPanel()
@@ -918,28 +1006,45 @@ void MainWindow::openAdvancedPanel()
 
 void MainWindow::syncAxisReadouts()
 {
-    if (!m_controller->isConnected()) {
+    const QList<int> boardIndices = connectedBoardIndices();
+    if (boardIndices.isEmpty()) {
         m_turnPositionLabel->setText(QStringLiteral("-- mm"));
         m_drivePositionLabel->setText(QStringLiteral("-- mm"));
         return;
     }
 
-    m_turnPositionLabel->setText(QStringLiteral("%1 mm")
-                                 .arg(QString::number(axisPositionMm(turnNodeId(), true), 'f', 2)));
-    m_drivePositionLabel->setText(QStringLiteral("%1 mm")
-                                  .arg(QString::number(axisPositionMm(driveNodeId(), false), 'f', 2)));
+    QStringList turnLines;
+    QStringList driveLines;
+    for (const int boardIndex : boardIndices) {
+        turnLines << QStringLiteral("%1 %2 mm")
+                        .arg(boardDisplayName(boardIndex),
+                             QString::number(axisPositionMm(boardIndex, boardTurnNodeId(boardIndex), true), 'f', 2));
+        driveLines << QStringLiteral("%1 %2 mm")
+                         .arg(boardDisplayName(boardIndex),
+                              QString::number(axisPositionMm(boardIndex, boardDriveNodeId(boardIndex), false), 'f', 2));
+    }
+    m_turnPositionLabel->setText(turnLines.join(QStringLiteral("\n")));
+    m_drivePositionLabel->setText(driveLines.join(QStringLiteral("\n")));
 }
 
 void MainWindow::setZeroPoint()
 {
-    if (!m_controller->isConnected()) {
+    const QList<int> boardIndices = connectedBoardIndices();
+    if (boardIndices.isEmpty()) {
         QMessageBox::warning(this, zh("e69caae8bf9ee68ea5"), zh("e8afb7e58588e8bf9ee68ea5204f4472697665e38082"));
         return;
     }
 
-    m_turnZeroTurns = m_controller->status(turnNodeId()).positionTurns;
-    m_driveZeroTurns = m_controller->status(driveNodeId()).positionTurns;
-    m_zeroPointInitialized = true;
+    for (const int boardIndex : boardIndices) {
+        BoardRuntime &runtime = m_boardRuntimes[boardIndex];
+        ODriveMotorController *controller = runtime.controller;
+        if (!controller) {
+            continue;
+        }
+        runtime.turnZeroTurns = controller->status(boardTurnNodeId(boardIndex)).positionTurns;
+        runtime.driveZeroTurns = controller->status(boardDriveNodeId(boardIndex)).positionTurns;
+        runtime.zeroPointInitialized = true;
+    }
     syncAxisReadouts();
     updateProgramStatus(zh("e99bb6e782b9e5b7b2e8aebee7bdae"));
     appendLog(zh("e5bd93e5898de8bdace8bdaee5928ce9a9b1e8bdaee4bd8de7bdaee5b7b2e8aeb0e4b8bae99bb6e782b9"));
@@ -947,39 +1052,45 @@ void MainWindow::setZeroPoint()
 
 void MainWindow::sendHome()
 {
-    if (!m_controller->isConnected()) {
+    const QList<int> boardIndices = connectedBoardIndices();
+    if (boardIndices.isEmpty()) {
         return;
     }
 
-    if (!m_zeroPointInitialized) {
+    bool needZeroPoint = false;
+    for (const int boardIndex : boardIndices) {
+        if (!m_boardRuntimes[boardIndex].zeroPointInitialized) {
+            needZeroPoint = true;
+            break;
+        }
+    }
+    if (needZeroPoint) {
         setZeroPoint();
     }
 
     m_scanState = ScanState();
-    commandAxisPosition(turnNodeId(), 0.0, m_homeSpeedSpin->value(), true);
-    commandAxisPosition(driveNodeId(), 0.0, m_homeSpeedSpin->value(), false);
+    for (const int boardIndex : boardIndices) {
+        commandAxisPosition(boardIndex, boardTurnNodeId(boardIndex), 0.0, m_homeSpeedSpin->value(), true);
+        commandAxisPosition(boardIndex, boardDriveNodeId(boardIndex), 0.0, m_homeSpeedSpin->value(), false);
+    }
     updateProgramStatus(zh("e6ada3e59ca8e59b9ee58e9fe782b9"));
 }
 
 void MainWindow::resetMotionState()
 {
-    if (!m_controller->isConnected()) {
+    const QList<int> boardIndices = connectedBoardIndices();
+    if (boardIndices.isEmpty()) {
         return;
     }
 
     stopAllMotion(true);
-
-    QList<quint8> nodeIds;
-    nodeIds << static_cast<quint8>(m_nodeIdSpin->value());
-    if (!nodeIds.contains(turnNodeId())) {
-        nodeIds << turnNodeId();
-    }
-    if (!nodeIds.contains(driveNodeId())) {
-        nodeIds << driveNodeId();
-    }
-
-    for (const quint8 nodeId : nodeIds) {
-        m_controller->clearErrors(nodeId, false);
+    for (const int boardIndex : boardIndices) {
+        if (ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller) {
+            controller->clearErrors(boardTurnNodeId(boardIndex), false);
+            if (boardDriveNodeId(boardIndex) != boardTurnNodeId(boardIndex)) {
+                controller->clearErrors(boardDriveNodeId(boardIndex), false);
+            }
+        }
     }
 
     m_scanState = ScanState();
@@ -988,18 +1099,22 @@ void MainWindow::resetMotionState()
 
 void MainWindow::enableAxes()
 {
-    if (!m_controller->isConnected()) {
+    const QList<int> boardIndices = connectedBoardIndices();
+    if (boardIndices.isEmpty()) {
         return;
     }
 
-    ensureAxisClosedLoop(turnNodeId());
-    ensureAxisClosedLoop(driveNodeId());
+    for (const int boardIndex : boardIndices) {
+        ensureAxisClosedLoop(boardIndex, boardTurnNodeId(boardIndex));
+        ensureAxisClosedLoop(boardIndex, boardDriveNodeId(boardIndex));
+    }
     updateProgramStatus(zh("e6898be58aa8e68ea7e588b6e5b7b2e5bc80e5a78b"));
 }
 
 void MainWindow::startScanProgram()
 {
-    if (!m_controller->isConnected()) {
+    const QList<int> boardIndices = connectedBoardIndices();
+    if (boardIndices.isEmpty()) {
         QMessageBox::warning(this, zh("e69caae8bf9ee68ea5"), zh("e8afb7e58588e8bf9ee68ea5204f4472697665e38082"));
         return;
     }
@@ -1013,7 +1128,14 @@ void MainWindow::startScanProgram()
         return;
     }
 
-    if (!m_zeroPointInitialized) {
+    bool needZeroPoint = false;
+    for (const int boardIndex : boardIndices) {
+        if (!m_boardRuntimes[boardIndex].zeroPointInitialized) {
+            needZeroPoint = true;
+            break;
+        }
+    }
+    if (needZeroPoint) {
         setZeroPoint();
     }
 
@@ -1023,8 +1145,10 @@ void MainWindow::startScanProgram()
     m_scanState.forward = true;
     m_scanState.maxStepMm = qMax(0.0, m_stepAxisLengthSpin->value());
 
-    commandAxisPosition(turnNodeId(), 0.0, m_homeSpeedSpin->value(), true);
-    commandAxisPosition(driveNodeId(), 0.0, m_homeSpeedSpin->value(), false);
+    for (const int boardIndex : boardIndices) {
+        commandAxisPosition(boardIndex, boardTurnNodeId(boardIndex), 0.0, m_homeSpeedSpin->value(), true);
+        commandAxisPosition(boardIndex, boardDriveNodeId(boardIndex), 0.0, m_homeSpeedSpin->value(), false);
+    }
 
     updateProgramStatus(zh("e689abe68f8fe58786e5a487e4b8adefbc8ce58588e59b9ee588b0e99bb6e782b9"));
     appendLog(zh("e887aae58aa8e689abe68f8fe5b7b2e5bc80e5a78b"));
@@ -1032,7 +1156,7 @@ void MainWindow::startScanProgram()
 
 void MainWindow::stopProgram()
 {
-    if (!m_controller->isConnected()) {
+    if (!hasAnyConnectedBoard()) {
         m_scanState = ScanState();
         updateProgramStatus(zh("e8afb7e58588e8bf9ee68ea5204f4472697665"));
         return;
@@ -1045,19 +1169,34 @@ void MainWindow::stopProgram()
 
 void MainWindow::stepAdvanceOnce()
 {
-    if (!m_controller->isConnected()) {
+    const QList<int> boardIndices = connectedBoardIndices();
+    if (boardIndices.isEmpty()) {
         return;
     }
 
-    if (!m_zeroPointInitialized) {
+    bool needZeroPoint = false;
+    for (const int boardIndex : boardIndices) {
+        if (!m_boardRuntimes[boardIndex].zeroPointInitialized) {
+            needZeroPoint = true;
+            break;
+        }
+    }
+    if (needZeroPoint) {
         setZeroPoint();
     }
 
     const double limitMm = qMax(0.0, m_stepAxisLengthSpin->value());
-    const double rawNextMm = axisPositionMm(turnNodeId(), true) + m_stepLengthSpin->value();
+    const int firstBoardIndex = boardIndices.first();
+    const double rawNextMm = axisPositionMm(firstBoardIndex, boardTurnNodeId(firstBoardIndex), true) + m_stepLengthSpin->value();
     const double nextMm = limitMm > 0.0 ? qMin(limitMm, rawNextMm) : rawNextMm;
 
-    commandAxisPosition(turnNodeId(), nextMm, qMax(0.1, m_jogSpeedSpin->value()), true);
+    for (const int boardIndex : boardIndices) {
+        commandAxisPosition(boardIndex,
+                            boardTurnNodeId(boardIndex),
+                            nextMm,
+                            qMax(0.1, m_jogSpeedSpin->value()),
+                            true);
+    }
     updateProgramStatus(zh("e6ada5e8bf9be8bdb4e7a7bbe58aa8e588b0202531206d6d").arg(QString::number(nextMm, 'f', 2)));
 }
 
@@ -1136,26 +1275,11 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
     m_linkStatusLabel->setMinimumWidth(90);
     m_linkStatusLabel->setStyleSheet(QStringLiteral("font-size: 18px;"));
 
-    m_activeNodesLabel = new QLabel(zh("e6a380e6b58be588b0e79a84e88a82e782b93a202d2d"), connectionGroup);
-    m_activeNodesLabel->setStyleSheet(QStringLiteral("font-size: 16px;"));
-    m_detectedNodesCombo = new QComboBox(connectionGroup);
-    m_detectedNodesCombo->setEnabled(false);
-    m_detectedNodesCombo->setMinimumWidth(120);
-    m_detectedNodesCombo->setStyleSheet(QStringLiteral("font-size: 16px;"));
-    
-    m_rescanNodesButton = new QPushButton(zh("e9878de696b0e689abe68f8f"), connectionGroup);
-    m_rescanNodesButton->setEnabled(false);
-    m_rescanNodesButton->setMinimumHeight(44);
-    m_rescanNodesButton->setStyleSheet(QStringLiteral("font-size: 16px; padding: 4px 12px;"));
-
     connectionLayout->addWidget(ipLabel);
     connectionLayout->addWidget(m_ipEdit, 1);
     connectionLayout->addWidget(m_connectButton);
     connectionLayout->addWidget(m_openAdvancedButton);
     connectionLayout->addWidget(m_linkStatusLabel);
-    connectionLayout->addWidget(m_activeNodesLabel);
-    connectionLayout->addWidget(m_detectedNodesCombo);
-    connectionLayout->addWidget(m_rescanNodesButton);
 
     QHBoxLayout *contentLayout = new QHBoxLayout;
     contentLayout->setSpacing(18);
@@ -1337,15 +1461,6 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
             this, &MainWindow::toggleConnection);
     connect(m_openAdvancedButton, &QPushButton::clicked,
             this, &MainWindow::openAdvancedPanel);
-    connect(m_rescanNodesButton, &QPushButton::clicked,
-            this, &MainWindow::scanForActiveNodes);
-    connect(m_detectedNodesCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, [this](int index) {
-        if (index >= 0 && m_detectedNodesCombo->count() > 0) {
-            const quint8 nodeId = m_detectedNodesCombo->currentData().toUInt();
-            switchToDetectedNode(nodeId);
-        }
-    });
     connect(m_setZeroButton, &QPushButton::clicked,
             this, &MainWindow::setZeroPoint);
     connect(m_homeButton, &QPushButton::clicked,
@@ -1363,7 +1478,8 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
 
     auto connectJogButton = [this](QPushButton *button, bool turnAxis, double direction) {
         connect(button, &QPushButton::pressed, this, [this, turnAxis, direction]() {
-            if (!m_controller->isConnected()) {
+            const QList<int> boardIndices = connectedBoardIndices();
+            if (boardIndices.isEmpty()) {
                 return;
             }
 
@@ -1372,17 +1488,25 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
                 updateProgramStatus(zh("e6898be58aa8e782b9e58aa8e5b7b2e4b8ade6ada2e887aae58aa8e689abe68f8f"));
             }
 
-            const quint8 nodeId = turnAxis ? turnNodeId() : driveNodeId();
-            commandAxisVelocity(nodeId, direction * qMax(0.1, m_jogSpeedSpin->value()), turnAxis);
+            for (const int boardIndex : boardIndices) {
+                const quint8 nodeId = turnAxis ? boardTurnNodeId(boardIndex) : boardDriveNodeId(boardIndex);
+                commandAxisVelocity(boardIndex,
+                                    nodeId,
+                                    direction * qMax(0.1, m_jogSpeedSpin->value()),
+                                    turnAxis);
+            }
         });
 
         connect(button, &QPushButton::released, this, [this, turnAxis]() {
-            if (!m_controller->isConnected()) {
+            const QList<int> boardIndices = connectedBoardIndices();
+            if (boardIndices.isEmpty()) {
                 return;
             }
 
-            const quint8 nodeId = turnAxis ? turnNodeId() : driveNodeId();
-            commandAxisVelocity(nodeId, 0.0, turnAxis);
+            for (const int boardIndex : boardIndices) {
+                const quint8 nodeId = turnAxis ? boardTurnNodeId(boardIndex) : boardDriveNodeId(boardIndex);
+                commandAxisVelocity(boardIndex, nodeId, 0.0, turnAxis);
+            }
             updateProgramStatus(zh("e782b9e58aa8e5819ce6ada2"));
         });
     };
@@ -1397,18 +1521,32 @@ void MainWindow::buildAdvancedDialog()
 {
     m_advancedDialog = new QDialog(this);
     m_advancedDialog->setWindowTitle(zh("e9ab98e7baa7e99da2e69dbf"));
-    m_advancedDialog->resize(1180, 860);
+    const QRect availableGeometry = QGuiApplication::primaryScreen()
+            ? QGuiApplication::primaryScreen()->availableGeometry()
+            : QRect(0, 0, 1280, 900);
+    m_advancedDialog->resize(qMax(900, int(availableGeometry.width() * 0.9)),
+                             qMax(650, int(availableGeometry.height() * 0.88)));
 
-    QVBoxLayout *layout = new QVBoxLayout(m_advancedDialog);
+    QVBoxLayout *dialogLayout = new QVBoxLayout(m_advancedDialog);
+    dialogLayout->setContentsMargins(8, 8, 8, 8);
+    dialogLayout->setSpacing(0);
+
+    QScrollArea *scrollArea = new QScrollArea(m_advancedDialog);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    dialogLayout->addWidget(scrollArea);
+
+    QWidget *contentWidget = new QWidget(scrollArea);
+    scrollArea->setWidget(contentWidget);
+
+    QVBoxLayout *layout = new QVBoxLayout(contentWidget);
     layout->setContentsMargins(12, 12, 12, 12);
     layout->setSpacing(12);
 
-    QGroupBox *communicationGroup = new QGroupBox(zh("e9809ae4bfa1e9858de7bdae"), m_advancedDialog);
+    QGroupBox *communicationGroup = new QGroupBox(zh("e9809ae4bfa1e9858de7bdae"), contentWidget);
     QGridLayout *communicationLayout = new QGridLayout(communicationGroup);
 
     m_pluginCombo = new QComboBox(communicationGroup);
-    m_interfaceCombo = new QComboBox(communicationGroup);
-    m_interfaceCombo->setEditable(true);
     m_bitrateSpin = new QSpinBox(communicationGroup);
     m_bitrateSpin->setRange(10000, 1000000);
     m_bitrateSpin->setSingleStep(10000);
@@ -1420,58 +1558,67 @@ void MainWindow::buildAdvancedDialog()
     m_serialBaudSpin->setValue(1000000);
     m_serialBaudSpin->setSuffix(QStringLiteral(" bps"));
     m_refreshInterfacesButton = new QPushButton(zh("e588b7e696b0e68ea5e58fa3"), communicationGroup);
+    m_advancedConnectButton = new QPushButton(QStringLiteral("connect"), communicationGroup);
+    m_advancedConnectButton->setMinimumHeight(40);
+    m_advancedConnectButton->setStyleSheet(QStringLiteral("font-size: 18px; padding: 4px 14px;"));
 
     communicationLayout->addWidget(new QLabel(zh("e68f92e4bbb6")), 0, 0);
     communicationLayout->addWidget(m_pluginCombo, 0, 1);
-    communicationLayout->addWidget(new QLabel(zh("e68ea5e58fa3")), 0, 2);
-    communicationLayout->addWidget(m_interfaceCombo, 0, 3);
-    communicationLayout->addWidget(m_refreshInterfacesButton, 0, 4);
+    communicationLayout->addWidget(m_refreshInterfacesButton, 0, 2);
+    communicationLayout->addWidget(m_advancedConnectButton, 0, 3);
     communicationLayout->addWidget(new QLabel(zh("e6b3a2e789b9e78e87")), 1, 0);
     communicationLayout->addWidget(m_bitrateSpin, 1, 1);
     communicationLayout->addWidget(new QLabel(QStringLiteral("Serial Baud")), 1, 2);
     communicationLayout->addWidget(m_serialBaudSpin, 1, 3);
     communicationLayout->setColumnStretch(3, 1);
 
-    QGroupBox *mappingGroup = new QGroupBox(zh("e88a82e782b9e4b88ee68da2e7ae97"), m_advancedDialog);
-    QGridLayout *mappingLayout = new QGridLayout(mappingGroup);
+    QGroupBox *interfaceConfigGroup = new QGroupBox(zh("e68ea5e58fa3e9858de7bdae"), contentWidget);
+    QGridLayout *interfaceConfigLayout = new QGridLayout(interfaceConfigGroup);
 
-    m_nodeIdSpin = new QSpinBox(mappingGroup);
-    m_nodeIdSpin->setRange(0, 63);
-    m_nodeIdSpin->setValue(16);
-    m_turnNodeIdSpin = new QSpinBox(mappingGroup);
-    m_turnNodeIdSpin->setRange(0, 63);
-    m_turnNodeIdSpin->setValue(16);
-    m_driveNodeIdSpin = new QSpinBox(mappingGroup);
-    m_driveNodeIdSpin->setRange(0, 63);
-    m_driveNodeIdSpin->setValue(1);
+    m_interfaceCountCombo = new QComboBox(interfaceConfigGroup);
+    m_interfaceCountCombo->addItem(zh("3120e4b8aae68ea5e58fa3"), 1);
+    m_interfaceCountCombo->addItem(zh("3220e4b8aae68ea5e58fa3"), 2);
+    m_interfaceCountCombo->addItem(zh("3320e4b8aae68ea5e58fa3"), 3);
+    m_interfaceCountCombo->addItem(zh("3420e4b8aae68ea5e58fa3"), 4);
+    m_interfaceCountCombo->setCurrentIndex(0);
 
-    m_turnScaleSpin = new QDoubleSpinBox(mappingGroup);
-    m_turnScaleSpin->setDecimals(4);
-    m_turnScaleSpin->setRange(0.0001, 100000.0);
-    m_turnScaleSpin->setValue(1.0);
-    m_turnScaleSpin->setSuffix(zh("206d6d2fe59c88"));
-    m_driveScaleSpin = new QDoubleSpinBox(mappingGroup);
-    m_driveScaleSpin->setDecimals(4);
-    m_driveScaleSpin->setRange(0.0001, 100000.0);
-    m_driveScaleSpin->setValue(1.0);
-    m_driveScaleSpin->setSuffix(zh("206d6d2fe59c88"));
+    interfaceConfigLayout->addWidget(new QLabel(zh("e8bf9ee68ea5e68ea5e58fa3e695b0"), interfaceConfigGroup), 0, 0);
+    interfaceConfigLayout->addWidget(m_interfaceCountCombo, 0, 1);
+    buildBoardConfigRows(interfaceConfigLayout, interfaceConfigGroup);
+    interfaceConfigLayout->setColumnStretch(3, 1);
 
-    mappingLayout->addWidget(new QLabel(zh("e8b083e8af95e88a82e782b9")), 0, 0);
-    mappingLayout->addWidget(m_nodeIdSpin, 0, 1);
-    mappingLayout->addWidget(new QLabel(zh("e8bdace8bdaee88a82e782b9")), 0, 2);
-    mappingLayout->addWidget(m_turnNodeIdSpin, 0, 3);
-    mappingLayout->addWidget(new QLabel(zh("e9a9b1e8bdaee88a82e782b9")), 0, 4);
-    mappingLayout->addWidget(m_driveNodeIdSpin, 0, 5);
-    mappingLayout->addWidget(new QLabel(zh("e8bdace8bdaee6af8fe59c88")), 1, 0);
-    mappingLayout->addWidget(m_turnScaleSpin, 1, 1);
-    mappingLayout->addWidget(new QLabel(zh("e9a9b1e8bdaee6af8fe59c88")), 1, 2);
-    mappingLayout->addWidget(m_driveScaleSpin, 1, 3);
-    mappingLayout->setColumnStretch(5, 1);
+    QGroupBox *nodeSwitchGroup = new QGroupBox(zh("e88a82e782b9e58887e68da2"), contentWidget);
+    QGridLayout *nodeSwitchLayout = new QGridLayout(nodeSwitchGroup);
+
+    m_debugBoardCombo = new QComboBox(nodeSwitchGroup);
+    m_debugNodeCombo = new QComboBox(nodeSwitchGroup);
+    m_debugNodeCombo->setEnabled(false);
+    m_debugScaleSpin = new QDoubleSpinBox(nodeSwitchGroup);
+    m_debugScaleSpin->setDecimals(4);
+    m_debugScaleSpin->setRange(0.0001, 100000.0);
+    m_debugScaleSpin->setValue(1.0);
+    m_debugScaleSpin->setSuffix(zh("206d6d2fe59c88"));
+    m_activeNodesLabel = new QLabel(zh("e6a380e6b58be588b0e79a84e88a82e782b93a202d2d"), nodeSwitchGroup);
+    m_activeNodesLabel->setStyleSheet(QStringLiteral("font-size: 16px;"));
+    m_rescanNodesButton = new QPushButton(zh("e9878de696b0e689abe68f8f"), nodeSwitchGroup);
+    m_rescanNodesButton->setMinimumHeight(40);
+    m_rescanNodesButton->setStyleSheet(QStringLiteral("font-size: 16px; padding: 4px 12px;"));
+
+    nodeSwitchLayout->addWidget(new QLabel(zh("e8b083e8af95e69dbfe5ad90"), nodeSwitchGroup), 0, 0);
+    nodeSwitchLayout->addWidget(m_debugBoardCombo, 0, 1);
+    nodeSwitchLayout->addWidget(new QLabel(zh("e8b083e8af95e88a82e782b9"), nodeSwitchGroup), 0, 2);
+    nodeSwitchLayout->addWidget(m_debugNodeCombo, 0, 3);
+    nodeSwitchLayout->addWidget(new QLabel(zh("e68da2e7ae97"), nodeSwitchGroup), 1, 0);
+    nodeSwitchLayout->addWidget(m_debugScaleSpin, 1, 1);
+    nodeSwitchLayout->addWidget(m_activeNodesLabel, 1, 2);
+    nodeSwitchLayout->addWidget(m_rescanNodesButton, 1, 3);
+    nodeSwitchLayout->setColumnStretch(2, 1);
 
     layout->addWidget(communicationGroup);
-    layout->addWidget(mappingGroup);
+    layout->addWidget(interfaceConfigGroup);
+    layout->addWidget(nodeSwitchGroup);
 
-    QGroupBox *txGroup = new QGroupBox(QStringLiteral("Transmit"), m_advancedDialog);
+    QGroupBox *txGroup = new QGroupBox(QStringLiteral("Transmit"), contentWidget);
     QGridLayout *txLayout = new QGridLayout(txGroup);
     txLayout->setHorizontalSpacing(10);
     txLayout->setVerticalSpacing(8);
@@ -1585,18 +1732,24 @@ void MainWindow::buildAdvancedDialog()
     txLayout->setColumnStretch(2, 1);
 
     layout->addWidget(txGroup);
-    buildAdvancedContent(layout, m_advancedDialog);
+    buildAdvancedContent(layout, contentWidget);
 
     connect(m_pluginCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MainWindow::refreshCanInterfaces);
     connect(m_refreshInterfacesButton, &QPushButton::clicked,
             this, &MainWindow::refreshCanInterfaces);
-    connect(m_interfaceCombo, &QComboBox::currentTextChanged,
-            this, &MainWindow::syncConnectionEditorsFromAdvanced);
+    connect(m_advancedConnectButton, &QPushButton::clicked,
+            this, &MainWindow::toggleConnection);
     connect(m_bitrateSpin, QOverload<int>::of(&QSpinBox::valueChanged),
             this, [this](int) { syncConnectionEditorsFromAdvanced(); });
     connect(m_serialBaudSpin, QOverload<int>::of(&QSpinBox::valueChanged),
             this, [this](int) { syncConnectionEditorsFromAdvanced(); });
+    connect(m_interfaceCountCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) {
+        updateBoardRowVisibility();
+        updateDebugBoardCombo();
+        syncConnectionEditorsFromAdvanced();
+    });
 
     m_txTimer = new QTimer(this);
     m_txTimer->setInterval(100);
@@ -1620,23 +1773,125 @@ void MainWindow::buildAdvancedDialog()
     connect(m_txRemoteCheck, &QCheckBox::toggled, this, [syncTxByteEditors](bool) { syncTxByteEditors(); });
     syncTxByteEditors();
 
-    auto nodeChanged = [this]() {
-        m_controller->setDefaultNodeId(static_cast<quint8>(m_nodeIdSpin->value()));
-        updateTrackedNodes();
-        syncAxisReadouts();
+    connect(m_rescanNodesButton, &QPushButton::clicked,
+            this, &MainWindow::scanForActiveNodes);
+    connect(m_debugBoardCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) {
+        updateDebugNodeCombo();
+        updateDebugScaleSpin();
         updateStatusPanel();
-    };
+    });
+    connect(m_debugNodeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int index) {
+        if (index >= 0 && m_debugNodeCombo->count() > 0) {
+            const quint8 nodeId = m_debugNodeCombo->currentData().toUInt();
+            switchToDetectedNode(nodeId);
+        }
+    });
+    connect(m_debugScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [this](double value) {
+        const int boardIndex = currentDebugBoardIndex();
+        if (boardIndex < 0 || boardIndex >= m_boardConfigRows.size()) {
+            return;
+        }
+        if (currentDebugNodeId() == boardTurnNodeId(boardIndex) && m_boardConfigRows[boardIndex].turnScaleSpin) {
+            m_boardConfigRows[boardIndex].turnScaleSpin->setValue(value);
+        } else if (currentDebugNodeId() == boardDriveNodeId(boardIndex) && m_boardConfigRows[boardIndex].driveScaleSpin) {
+            m_boardConfigRows[boardIndex].driveScaleSpin->setValue(value);
+        }
+        syncAxisReadouts();
+        scheduleSaveSettings();
+    });
 
-    connect(m_nodeIdSpin, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, [this, nodeChanged](int) { nodeChanged(); syncConnectionEditorsFromAdvanced(); });
-    connect(m_turnNodeIdSpin, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, [nodeChanged](int) { nodeChanged(); });
-    connect(m_driveNodeIdSpin, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, [nodeChanged](int) { nodeChanged(); });
-    connect(m_turnScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, [this](double) { syncAxisReadouts(); });
-    connect(m_driveScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, [this](double) { syncAxisReadouts(); });
+    updateBoardRowVisibility();
+    updateDebugBoardCombo();
+    updateDebugNodeCombo();
+    updateDebugScaleSpin();
+}
+
+void MainWindow::buildBoardConfigRows(QGridLayout *layout, QWidget *parent)
+{
+    constexpr int maxBoards = 4;
+    m_boardConfigRows.resize(maxBoards);
+    m_boardRuntimes.resize(maxBoards);
+
+    layout->addWidget(new QLabel(zh("e69dbfe5ad90")), 1, 0);
+    layout->addWidget(new QLabel(zh("e68ea5e58fa3")), 1, 1);
+    layout->addWidget(new QLabel(zh("e88a82e782b9e689abe68f8f")), 1, 2);
+    layout->addWidget(new QLabel(zh("e8bdace8bdb4e88a82e782b9")), 1, 3);
+    layout->addWidget(new QLabel(zh("e9a9b1e8bdb4e88a82e782b9")), 1, 4);
+    layout->addWidget(new QLabel(zh("e8bdace8bdb4e68da2e7ae97")), 1, 5);
+    layout->addWidget(new QLabel(zh("e9a9b1e8bdb4e68da2e7ae97")), 1, 6);
+    layout->addWidget(new QLabel(zh("e78ab6e68081")), 1, 7);
+
+    for (int boardIndex = 0; boardIndex < maxBoards; ++boardIndex) {
+        BoardConfigRow &row = m_boardConfigRows[boardIndex];
+        row.label = new QLabel(zh("e69dbf2531").arg(boardIndex + 1), parent);
+        row.interfaceCombo = new QComboBox(parent);
+        row.interfaceCombo->setMinimumWidth(150);
+        row.scanNodesButton = new QPushButton(zh("e689abe68f8f"), parent);
+        row.turnNodeCombo = new QComboBox(parent);
+        row.driveNodeCombo = new QComboBox(parent);
+        row.turnScaleSpin = new QDoubleSpinBox(parent);
+        row.turnScaleSpin->setDecimals(4);
+        row.turnScaleSpin->setRange(0.0001, 100000.0);
+        row.turnScaleSpin->setValue(1.0);
+        row.turnScaleSpin->setSuffix(zh("206d6d2fe59c88"));
+        row.driveScaleSpin = new QDoubleSpinBox(parent);
+        row.driveScaleSpin->setDecimals(4);
+        row.driveScaleSpin->setRange(0.0001, 100000.0);
+        row.driveScaleSpin->setValue(1.0);
+        row.driveScaleSpin->setSuffix(zh("206d6d2fe59c88"));
+        row.statusLabel = new QLabel(QStringLiteral("--"), parent);
+        row.statusLabel->setMinimumWidth(120);
+
+        const int gridRow = boardIndex + 2;
+        layout->addWidget(row.label, gridRow, 0);
+        layout->addWidget(row.interfaceCombo, gridRow, 1);
+        layout->addWidget(row.scanNodesButton, gridRow, 2);
+        layout->addWidget(row.turnNodeCombo, gridRow, 3);
+        layout->addWidget(row.driveNodeCombo, gridRow, 4);
+        layout->addWidget(row.turnScaleSpin, gridRow, 5);
+        layout->addWidget(row.driveScaleSpin, gridRow, 6);
+        layout->addWidget(row.statusLabel, gridRow, 7);
+
+        connect(row.interfaceCombo, &QComboBox::currentTextChanged, this, [this, boardIndex](const QString &) {
+            m_boardConfigRows[boardIndex].preferredInterfaceName = m_boardConfigRows[boardIndex].interfaceCombo
+                    ? m_boardConfigRows[boardIndex].interfaceCombo->currentText().trimmed()
+                    : QString();
+            m_boardConfigRows[boardIndex].detectedNodes.clear();
+            updateBoardNodeCombos(boardIndex);
+            updateBoardStatusLabel(boardIndex);
+            updateDebugBoardCombo();
+            syncConnectionEditorsFromAdvanced();
+            scheduleSaveSettings();
+        });
+        connect(row.scanNodesButton, &QPushButton::clicked, this, [this, boardIndex]() {
+            refreshBoardNodes(boardIndex, true);
+        });
+        connect(row.turnNodeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, boardIndex](int) {
+            m_boardConfigRows[boardIndex].preferredTurnNodeId = boardTurnNodeId(boardIndex);
+            updateDebugScaleSpin();
+            syncAxisReadouts();
+            scheduleSaveSettings();
+        });
+        connect(row.driveNodeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, boardIndex](int) {
+            m_boardConfigRows[boardIndex].preferredDriveNodeId = boardDriveNodeId(boardIndex);
+            updateDebugScaleSpin();
+            syncAxisReadouts();
+            scheduleSaveSettings();
+        });
+        connect(row.turnScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double) {
+            updateDebugScaleSpin();
+            syncAxisReadouts();
+            scheduleSaveSettings();
+        });
+        connect(row.driveScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double) {
+            updateDebugScaleSpin();
+            syncAxisReadouts();
+            scheduleSaveSettings();
+        });
+    }
 }
 
 void MainWindow::buildAdvancedContent(QVBoxLayout *mainLayout, QWidget *parent)
@@ -1848,10 +2103,14 @@ void MainWindow::buildAdvancedContent(QVBoxLayout *mainLayout, QWidget *parent)
     connect(m_refreshStatusButton, &QPushButton::clicked,
             this, &MainWindow::refreshTelemetry);
     connect(m_estopButton, &QPushButton::clicked, this, [this]() {
-        m_controller->estop();
+        if (ODriveMotorController *controller = currentDebugController()) {
+            controller->estop(currentDebugNodeId());
+        }
     });
     connect(m_clearErrorsButton, &QPushButton::clicked, this, [this]() {
-        m_controller->clearErrors(false);
+        if (ODriveMotorController *controller = currentDebugController()) {
+            controller->clearErrors(currentDebugNodeId(), false);
+        }
     });
 }
 
@@ -1876,26 +2135,34 @@ void MainWindow::loadSettings()
         }
     };
 
-    const QString savedInterfaceName = settings.value(QStringLiteral("comm/interface")).toString();
     if (m_pluginCombo) {
         m_pluginCombo->blockSignals(true);
         setComboByData(m_pluginCombo, settings.value(QStringLiteral("comm/plugin")));
         m_pluginCombo->blockSignals(false);
     }
-    if (m_interfaceCombo) {
-        m_interfaceCombo->blockSignals(true);
-        if (!savedInterfaceName.isEmpty()) {
-            m_interfaceCombo->setEditText(savedInterfaceName);
-        }
-        m_interfaceCombo->blockSignals(false);
-    }
     if (m_bitrateSpin) m_bitrateSpin->setValue(settings.value(QStringLiteral("comm/bitrate"), m_bitrateSpin->value()).toInt());
     if (m_serialBaudSpin) m_serialBaudSpin->setValue(settings.value(QStringLiteral("comm/serial_baud"), m_serialBaudSpin->value()).toInt());
-    if (m_nodeIdSpin) m_nodeIdSpin->setValue(settings.value(QStringLiteral("comm/node_id"), m_nodeIdSpin->value()).toInt());
-    if (m_turnNodeIdSpin) m_turnNodeIdSpin->setValue(settings.value(QStringLiteral("mapping/turn_node"), m_turnNodeIdSpin->value()).toInt());
-    if (m_driveNodeIdSpin) m_driveNodeIdSpin->setValue(settings.value(QStringLiteral("mapping/drive_node"), m_driveNodeIdSpin->value()).toInt());
-    if (m_turnScaleSpin) m_turnScaleSpin->setValue(settings.value(QStringLiteral("mapping/turn_scale"), m_turnScaleSpin->value()).toDouble());
-    if (m_driveScaleSpin) m_driveScaleSpin->setValue(settings.value(QStringLiteral("mapping/drive_scale"), m_driveScaleSpin->value()).toDouble());
+    if (m_interfaceCountCombo) {
+        setComboByData(m_interfaceCountCombo, settings.value(QStringLiteral("comm/interface_count"), 1));
+    }
+    for (int boardIndex = 0; boardIndex < m_boardConfigRows.size(); ++boardIndex) {
+        BoardConfigRow &row = m_boardConfigRows[boardIndex];
+        row.preferredInterfaceName = settings.value(QStringLiteral("boards/%1/interface").arg(boardIndex),
+                                                    row.preferredInterfaceName).toString();
+        row.preferredTurnNodeId = settings.value(QStringLiteral("boards/%1/turn_node").arg(boardIndex),
+                                                 row.preferredTurnNodeId).toInt();
+        row.preferredDriveNodeId = settings.value(QStringLiteral("boards/%1/drive_node").arg(boardIndex),
+                                                  row.preferredDriveNodeId).toInt();
+        if (row.turnScaleSpin) {
+            row.turnScaleSpin->setValue(settings.value(QStringLiteral("boards/%1/turn_scale").arg(boardIndex),
+                                                       row.turnScaleSpin->value()).toDouble());
+        }
+        if (row.driveScaleSpin) {
+            row.driveScaleSpin->setValue(settings.value(QStringLiteral("boards/%1/drive_scale").arg(boardIndex),
+                                                        row.driveScaleSpin->value()).toDouble());
+        }
+    }
+    updateBoardRowVisibility();
 
     if (m_homeSpeedSpin) m_homeSpeedSpin->setValue(settings.value(QStringLiteral("motion/home_speed"), m_homeSpeedSpin->value()).toDouble());
     if (m_jogSpeedSpin) m_jogSpeedSpin->setValue(settings.value(QStringLiteral("motion/jog_speed"), m_jogSpeedSpin->value()).toDouble());
@@ -1916,6 +2183,11 @@ void MainWindow::loadSettings()
     if (m_torqueSpin) m_torqueSpin->setValue(settings.value(QStringLiteral("control/torque"), m_torqueSpin->value()).toDouble());
     if (m_velocityLimitSpin) m_velocityLimitSpin->setValue(settings.value(QStringLiteral("control/velocity_limit"), m_velocityLimitSpin->value()).toDouble());
     if (m_currentLimitSpin) m_currentLimitSpin->setValue(settings.value(QStringLiteral("control/current_limit"), m_currentLimitSpin->value()).toDouble());
+    if (m_debugBoardCombo) m_debugBoardCombo->setCurrentIndex(settings.value(QStringLiteral("debug/board_index"), 0).toInt());
+    if (m_debugNodeCombo) {
+        m_debugNodeCombo->setProperty("saved_node_id", settings.value(QStringLiteral("debug/node_id"), QVariant()));
+    }
+    if (m_debugScaleSpin) m_debugScaleSpin->setValue(settings.value(QStringLiteral("debug/scale"), m_debugScaleSpin->value()).toDouble());
 
     if (m_txIdEdit) m_txIdEdit->setText(settings.value(QStringLiteral("tx/id"), m_txIdEdit->text()).toString());
     if (m_txDlcSpin) m_txDlcSpin->setValue(settings.value(QStringLiteral("tx/dlc"), m_txDlcSpin->value()).toInt());
@@ -1940,14 +2212,20 @@ void MainWindow::saveSettings() const
     }
 
     if (m_pluginCombo) settings.setValue(QStringLiteral("comm/plugin"), currentPluginId(m_pluginCombo));
-    if (m_interfaceCombo) settings.setValue(QStringLiteral("comm/interface"), m_interfaceCombo->currentText().trimmed());
     if (m_bitrateSpin) settings.setValue(QStringLiteral("comm/bitrate"), m_bitrateSpin->value());
     if (m_serialBaudSpin) settings.setValue(QStringLiteral("comm/serial_baud"), m_serialBaudSpin->value());
-    if (m_nodeIdSpin) settings.setValue(QStringLiteral("comm/node_id"), m_nodeIdSpin->value());
-    if (m_turnNodeIdSpin) settings.setValue(QStringLiteral("mapping/turn_node"), m_turnNodeIdSpin->value());
-    if (m_driveNodeIdSpin) settings.setValue(QStringLiteral("mapping/drive_node"), m_driveNodeIdSpin->value());
-    if (m_turnScaleSpin) settings.setValue(QStringLiteral("mapping/turn_scale"), m_turnScaleSpin->value());
-    if (m_driveScaleSpin) settings.setValue(QStringLiteral("mapping/drive_scale"), m_driveScaleSpin->value());
+    if (m_interfaceCountCombo) settings.setValue(QStringLiteral("comm/interface_count"), connectedInterfaceCount());
+    for (int boardIndex = 0; boardIndex < m_boardConfigRows.size(); ++boardIndex) {
+        const BoardConfigRow &row = m_boardConfigRows.at(boardIndex);
+        if (row.interfaceCombo) settings.setValue(QStringLiteral("boards/%1/interface").arg(boardIndex), row.interfaceCombo->currentText().trimmed());
+        if (row.turnNodeCombo) settings.setValue(QStringLiteral("boards/%1/turn_node").arg(boardIndex), comboNodeValue(row.turnNodeCombo, static_cast<quint8>(row.preferredTurnNodeId)));
+        if (row.driveNodeCombo) settings.setValue(QStringLiteral("boards/%1/drive_node").arg(boardIndex), comboNodeValue(row.driveNodeCombo, static_cast<quint8>(row.preferredDriveNodeId)));
+        if (row.turnScaleSpin) settings.setValue(QStringLiteral("boards/%1/turn_scale").arg(boardIndex), row.turnScaleSpin->value());
+        if (row.driveScaleSpin) settings.setValue(QStringLiteral("boards/%1/drive_scale").arg(boardIndex), row.driveScaleSpin->value());
+    }
+    if (m_debugBoardCombo) settings.setValue(QStringLiteral("debug/board_index"), m_debugBoardCombo->currentIndex());
+    if (m_debugNodeCombo) settings.setValue(QStringLiteral("debug/node_id"), comboNodeValue(m_debugNodeCombo, 0));
+    if (m_debugScaleSpin) settings.setValue(QStringLiteral("debug/scale"), m_debugScaleSpin->value());
 
     if (m_homeSpeedSpin) settings.setValue(QStringLiteral("motion/home_speed"), m_homeSpeedSpin->value());
     if (m_jogSpeedSpin) settings.setValue(QStringLiteral("motion/jog_speed"), m_jogSpeedSpin->value());
@@ -1985,7 +2263,7 @@ void MainWindow::connectSettingsPersistence()
 {
     const QList<QDoubleSpinBox *> doubleSpins = {
         m_homeSpeedSpin, m_jogSpeedSpin, m_scanAxisLengthSpin, m_scanSpeedSpin,
-        m_stepAxisLengthSpin, m_stepLengthSpin, m_turnScaleSpin, m_driveScaleSpin,
+        m_stepAxisLengthSpin, m_stepLengthSpin,
         m_positionSpin, m_positionVelFfSpin, m_positionTorqueFfSpin,
         m_velocitySpin, m_velocityTorqueFfSpin, m_torqueSpin,
         m_velocityLimitSpin, m_currentLimitSpin
@@ -1995,15 +2273,15 @@ void MainWindow::connectSettingsPersistence()
     }
 
     const QList<QSpinBox *> spins = {
-        m_bitrateSpin, m_serialBaudSpin, m_nodeIdSpin, m_turnNodeIdSpin,
-        m_driveNodeIdSpin, m_txDlcSpin, m_txPeriodSpin
+        m_bitrateSpin, m_serialBaudSpin, m_txDlcSpin, m_txPeriodSpin
     };
     for (QSpinBox *spin : spins) {
         if (spin) connect(spin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { scheduleSaveSettings(); });
     }
 
     const QList<QComboBox *> combos = {
-        m_pluginCombo, m_interfaceCombo, m_scanModeCombo, m_controlModeCombo, m_inputModeCombo
+        m_pluginCombo, m_interfaceCountCombo, m_debugBoardCombo, m_debugNodeCombo,
+        m_scanModeCombo, m_controlModeCombo, m_inputModeCombo
     };
     for (QComboBox *combo : combos) {
         if (combo) connect(combo, &QComboBox::currentTextChanged, this, [this](const QString &) { scheduleSaveSettings(); });
@@ -2148,49 +2426,466 @@ void MainWindow::setMotionControlsEnabled(bool enabled)
     }
 }
 
-void MainWindow::updateTrackedNodes()
+void MainWindow::refreshBoardInterfaceOptions()
 {
-    QList<quint8> nodeIds;
-    const QList<int> rawNodeIds = {
-        m_nodeIdSpin ? m_nodeIdSpin->value() : 0,
-        m_turnNodeIdSpin ? m_turnNodeIdSpin->value() : 0,
-        m_driveNodeIdSpin ? m_driveNodeIdSpin->value() : 0
+    for (int boardIndex = 0; boardIndex < m_boardConfigRows.size(); ++boardIndex) {
+        BoardConfigRow &row = m_boardConfigRows[boardIndex];
+        if (!row.interfaceCombo) {
+            continue;
+        }
+
+        const QString preferred = row.interfaceCombo->currentText().trimmed().isEmpty()
+                ? row.preferredInterfaceName
+                : row.interfaceCombo->currentText().trimmed();
+        row.interfaceCombo->blockSignals(true);
+        row.interfaceCombo->clear();
+        row.interfaceCombo->addItems(m_availableInterfaces);
+        const int preferredIndex = row.interfaceCombo->findText(preferred);
+        if (preferredIndex >= 0) {
+            row.interfaceCombo->setCurrentIndex(preferredIndex);
+        }
+        row.interfaceCombo->blockSignals(false);
+    }
+}
+
+void MainWindow::updateBoardRowVisibility()
+{
+    const int visibleCount = connectedInterfaceCount();
+    for (int boardIndex = 0; boardIndex < m_boardConfigRows.size(); ++boardIndex) {
+        const bool visible = boardIndex < visibleCount;
+        BoardConfigRow &row = m_boardConfigRows[boardIndex];
+        if (row.label) row.label->setVisible(visible);
+        if (row.interfaceCombo) row.interfaceCombo->setVisible(visible);
+        if (row.scanNodesButton) row.scanNodesButton->setVisible(visible);
+        if (row.turnNodeCombo) row.turnNodeCombo->setVisible(visible);
+        if (row.driveNodeCombo) row.driveNodeCombo->setVisible(visible);
+        if (row.turnScaleSpin) row.turnScaleSpin->setVisible(visible);
+        if (row.driveScaleSpin) row.driveScaleSpin->setVisible(visible);
+        if (row.statusLabel) row.statusLabel->setVisible(visible);
+    }
+}
+
+void MainWindow::updateBoardNodeCombos(int boardIndex)
+{
+    if (boardIndex < 0 || boardIndex >= m_boardConfigRows.size()) {
+        return;
+    }
+
+    BoardConfigRow &row = m_boardConfigRows[boardIndex];
+    auto updateCombo = [](QComboBox *combo, const QList<quint8> &nodes, int preferredNodeId) {
+        if (!combo) {
+            return;
+        }
+        combo->blockSignals(true);
+        combo->clear();
+        QList<quint8> values = nodes;
+        const quint8 preferred = static_cast<quint8>(preferredNodeId & 0x3F);
+        if (!values.contains(preferred)) {
+            values << preferred;
+        }
+        std::sort(values.begin(), values.end());
+        values.erase(std::unique(values.begin(), values.end()), values.end());
+        for (const quint8 nodeId : values) {
+            combo->addItem(QStringLiteral("Node %1").arg(nodeId), nodeId);
+        }
+        const int preferredIndex = combo->findData(preferred);
+        if (preferredIndex >= 0) {
+            combo->setCurrentIndex(preferredIndex);
+        }
+        combo->blockSignals(false);
     };
 
-    for (const int rawNodeId : rawNodeIds) {
-        const quint8 nodeId = static_cast<quint8>(rawNodeId & 0x3F);
-        if (!nodeIds.contains(nodeId)) {
-            nodeIds << nodeId;
+    updateCombo(row.turnNodeCombo, row.detectedNodes, row.preferredTurnNodeId);
+    updateCombo(row.driveNodeCombo, row.detectedNodes, row.preferredDriveNodeId);
+}
+
+void MainWindow::updateAllBoardNodeCombos()
+{
+    for (int boardIndex = 0; boardIndex < m_boardConfigRows.size(); ++boardIndex) {
+        updateBoardNodeCombos(boardIndex);
+    }
+}
+
+void MainWindow::updateBoardStatusLabel(int boardIndex, const QString &statusText)
+{
+    if (boardIndex < 0 || boardIndex >= m_boardConfigRows.size()) {
+        return;
+    }
+
+    BoardConfigRow &row = m_boardConfigRows[boardIndex];
+    if (!row.statusLabel) {
+        return;
+    }
+
+    if (!statusText.isEmpty()) {
+        row.statusLabel->setText(statusText);
+        return;
+    }
+
+    if (boardIndex < m_boardRuntimes.size() && m_boardRuntimes[boardIndex].connected) {
+        row.statusLabel->setText(zh("e5b7b2e8bf9ee68ea5"));
+        return;
+    }
+
+    if (!row.detectedNodes.isEmpty()) {
+        row.statusLabel->setText(zh("e88a82e782b93a202531").arg(row.detectedNodes.size()));
+        return;
+    }
+
+    row.statusLabel->setText(QStringLiteral("--"));
+}
+
+void MainWindow::updateDebugBoardCombo()
+{
+    if (!m_debugBoardCombo) {
+        return;
+    }
+
+    const QVariant previousData = m_debugBoardCombo->currentData();
+    m_debugBoardCombo->blockSignals(true);
+    m_debugBoardCombo->clear();
+    for (int boardIndex = 0; boardIndex < connectedInterfaceCount() && boardIndex < m_boardConfigRows.size(); ++boardIndex) {
+        const QString interfaceName = boardInterfaceName(boardIndex);
+        if (!interfaceName.isEmpty()) {
+            m_debugBoardCombo->addItem(QStringLiteral("%1 (%2)").arg(boardDisplayName(boardIndex), interfaceName), boardIndex);
+        }
+    }
+    int index = m_debugBoardCombo->findData(previousData);
+    if (index < 0 && m_debugBoardCombo->count() > 0) {
+        index = 0;
+    }
+    if (index >= 0) {
+        m_debugBoardCombo->setCurrentIndex(index);
+    }
+    m_debugBoardCombo->blockSignals(false);
+}
+
+void MainWindow::updateDebugNodeCombo()
+{
+    if (!m_debugNodeCombo) {
+        return;
+    }
+
+    const int boardIndex = currentDebugBoardIndex();
+    m_debugNodeCombo->blockSignals(true);
+    m_debugNodeCombo->clear();
+    if (boardIndex >= 0 && boardIndex < m_boardConfigRows.size()) {
+        const QList<quint8> nodes = m_boardConfigRows[boardIndex].detectedNodes;
+        for (const quint8 nodeId : nodes) {
+            m_debugNodeCombo->addItem(QStringLiteral("Node %1").arg(nodeId), nodeId);
+        }
+        const QVariant savedNode = m_debugNodeCombo->property("saved_node_id");
+        int index = savedNode.isValid() ? m_debugNodeCombo->findData(savedNode) : -1;
+        if (index < 0) {
+            index = m_debugNodeCombo->findData(boardTurnNodeId(boardIndex));
+        }
+        if (index < 0 && m_debugNodeCombo->count() > 0) {
+            index = 0;
+        }
+        if (index >= 0) {
+            m_debugNodeCombo->setCurrentIndex(index);
+        }
+        m_debugNodeCombo->setEnabled(m_debugNodeCombo->count() > 0);
+    } else {
+        m_debugNodeCombo->setEnabled(false);
+    }
+    m_debugNodeCombo->blockSignals(false);
+    updateDetectedNodesList();
+}
+
+void MainWindow::updateDebugScaleSpin()
+{
+    if (!m_debugScaleSpin) {
+        return;
+    }
+
+    const int boardIndex = currentDebugBoardIndex();
+    if (boardIndex < 0 || boardIndex >= m_boardConfigRows.size()) {
+        m_debugScaleSpin->setEnabled(false);
+        return;
+    }
+
+    m_debugScaleSpin->setEnabled(true);
+    const quint8 nodeId = currentDebugNodeId();
+    const BoardConfigRow &row = m_boardConfigRows[boardIndex];
+    m_debugScaleSpin->blockSignals(true);
+    if (nodeId == boardTurnNodeId(boardIndex) && row.turnScaleSpin) {
+        m_debugScaleSpin->setValue(row.turnScaleSpin->value());
+    } else if (nodeId == boardDriveNodeId(boardIndex) && row.driveScaleSpin) {
+        m_debugScaleSpin->setValue(row.driveScaleSpin->value());
+    }
+    m_debugScaleSpin->blockSignals(false);
+}
+
+void MainWindow::refreshCurrentBoardNodes()
+{
+    refreshBoardNodes(currentDebugBoardIndex(), true);
+}
+
+void MainWindow::refreshBoardNodes(int boardIndex, bool temporaryConnectionAllowed)
+{
+    if (boardIndex < 0 || boardIndex >= m_boardConfigRows.size()) {
+        return;
+    }
+
+    const QString interfaceName = boardInterfaceName(boardIndex);
+    if (interfaceName.isEmpty()) {
+        updateBoardStatusLabel(boardIndex, zh("e8afb7e98089e68ba9e68ea5e58fa3"));
+        return;
+    }
+
+    ODriveMotorController *controller = nullptr;
+    bool temporaryController = false;
+    if (boardIndex < m_boardRuntimes.size() && m_boardRuntimes[boardIndex].connected) {
+        controller = m_boardRuntimes[boardIndex].controller;
+    } else if (temporaryConnectionAllowed) {
+        controller = new ODriveMotorController(this);
+        temporaryController = true;
+        if (!controller->connectDevice(currentPluginId(m_pluginCombo),
+                                       interfaceName,
+                                       m_bitrateSpin->value(),
+                                       m_serialBaudSpin->value(),
+                                       static_cast<quint8>(m_boardConfigRows[boardIndex].preferredTurnNodeId & 0x3F))) {
+            appendLog(QStringLiteral("%1 %2").arg(boardLogPrefix(boardIndex), zh("e88a82e782b9e689abe68f8fe8bf9ee68ea5e5a4b1e8b4a5")));
+            controller->deleteLater();
+            updateBoardStatusLabel(boardIndex, zh("e689abe68f8fe5a4b1e8b4a5"));
+            return;
         }
     }
 
-    m_controller->setDefaultNodeId(static_cast<quint8>(m_nodeIdSpin->value()));
-    m_controller->setTrackedNodeIds(nodeIds);
-
-    if (m_controller->isConnected()) {
-        m_controller->requestTrackedTelemetry();
+    if (!controller) {
+        return;
     }
+
+    appendLog(QStringLiteral("%1 %2").arg(boardLogPrefix(boardIndex), zh("e6ada3e59ca8e689abe68f8fe88a82e782b92e2e2e")));
+    updateBoardStatusLabel(boardIndex, zh("e689abe68f8fe4b8ad"));
+    controller->probeAllNodes();
+    QTimer::singleShot(1500, this, [this, boardIndex, controller, temporaryController]() {
+        QList<quint8> nodes = controller->recentResponsiveNodeIds(2000);
+        std::sort(nodes.begin(), nodes.end());
+        m_boardConfigRows[boardIndex].detectedNodes = nodes;
+        if (boardIndex < m_boardRuntimes.size() && m_boardRuntimes[boardIndex].connected) {
+            m_boardRuntimes[boardIndex].detectedNodes = nodes;
+        }
+        updateBoardNodeCombos(boardIndex);
+        updateBoardStatusLabel(boardIndex);
+        updateDebugBoardCombo();
+        updateDebugNodeCombo();
+        updateDebugScaleSpin();
+
+        if (nodes.isEmpty()) {
+            appendLog(QStringLiteral("%1 %2").arg(boardLogPrefix(boardIndex), zh("e69caae6a380e6b58be588b0e88a82e782b9")));
+        } else {
+            QStringList nodeStrings;
+            for (const quint8 nodeId : nodes) {
+                nodeStrings << QString::number(nodeId);
+            }
+            appendLog(QStringLiteral("%1 %2").arg(boardLogPrefix(boardIndex), zh("e6a380e6b58be588b0e88a82e782b93a202532").arg(nodeStrings.join(", "))));
+        }
+
+        if (temporaryController) {
+            controller->disconnectDevice();
+            controller->deleteLater();
+        }
+    });
+}
+
+void MainWindow::connectBoardControllerSignals(int boardIndex, ODriveMotorController *controller)
+{
+    connect(controller, &ODriveMotorController::connectionChanged, this, [this, boardIndex](bool connected) {
+        if (boardIndex >= 0 && boardIndex < m_boardRuntimes.size()) {
+            m_boardRuntimes[boardIndex].connected = connected;
+            updateBoardStatusLabel(boardIndex, connected ? zh("e5b7b2e8bf9ee68ea5") : zh("e69caae8bf9ee68ea5"));
+        }
+        updateConnectionStateFromBoards();
+    });
+    connect(controller, &ODriveMotorController::statusUpdated, this, &MainWindow::scheduleStatusPanelUpdate);
+    connect(controller, &ODriveMotorController::nodeStatusUpdated, this, [this](quint8 nodeId) {
+        handleNodeStatusUpdate(nodeId);
+    });
+    connect(controller, &ODriveMotorController::logMessage, this, [this, boardIndex](const QString &message) {
+        appendLog(QStringLiteral("%1 %2").arg(boardLogPrefix(boardIndex), message));
+    });
+    connect(controller, &ODriveMotorController::rxMessage, this, [this, boardIndex](const QString &message) {
+        const QString tagged = QStringLiteral("%1 %2").arg(boardLogPrefix(boardIndex), message);
+        appendRxMessage(tagged);
+        handleCustomTxRxMessage(tagged);
+    });
+    connect(controller, &ODriveMotorController::errorMessage, this, [this, boardIndex](const QString &message) {
+        appendLog(QStringLiteral("%1 %2").arg(boardLogPrefix(boardIndex), message));
+    });
+}
+
+void MainWindow::disconnectAllBoards()
+{
+    for (int boardIndex = 0; boardIndex < m_boardRuntimes.size(); ++boardIndex) {
+        BoardRuntime &runtime = m_boardRuntimes[boardIndex];
+        runtime.connected = false;
+        runtime.zeroPointInitialized = false;
+        if (runtime.controller) {
+            runtime.controller->disconnectDevice();
+            runtime.controller->deleteLater();
+            runtime.controller = nullptr;
+        }
+        updateBoardStatusLabel(boardIndex);
+    }
+    updateConnectionState(false);
+}
+
+void MainWindow::updateConnectionStateFromBoards()
+{
+    updateConnectionState(hasAnyConnectedBoard());
 }
 
 void MainWindow::syncConnectionEditorsFromAdvanced()
 {
-    if (!m_ipEdit || !m_pluginCombo || !m_interfaceCombo || !m_bitrateSpin || !m_nodeIdSpin) {
+    if (!m_ipEdit || !m_pluginCombo || !m_bitrateSpin) {
         return;
     }
 
     const QString plugin = currentPluginId(m_pluginCombo);
-    const QString interfaceName = m_interfaceCombo->currentText().trimmed();
     QString summary = pluginLabel(plugin);
-    if (!interfaceName.isEmpty()) {
-        summary += QStringLiteral(" | %1").arg(interfaceName);
+    QStringList interfaceNames;
+    for (const int boardIndex : configuredBoardIndices()) {
+        const QString interfaceName = boardInterfaceName(boardIndex);
+        if (!interfaceName.isEmpty()) {
+            interfaceNames << interfaceName;
+        }
     }
-    summary += QStringLiteral(" | %1 bps | node %2")
+    if (!interfaceNames.isEmpty()) {
+        summary += QStringLiteral(" | %1").arg(interfaceNames.join(", "));
+    }
+    summary += QStringLiteral(" | %1 bps | %2 interface(s)")
             .arg(QString::number(m_bitrateSpin->value()),
-                 QString::number(m_nodeIdSpin->value()));
+                 QString::number(interfaceNames.size()));
 
     m_ipEdit->blockSignals(true);
     m_ipEdit->setText(summary);
     m_ipEdit->blockSignals(false);
+}
+
+bool MainWindow::hasAnyConnectedBoard() const
+{
+    return !connectedBoardIndices().isEmpty();
+}
+
+QList<int> MainWindow::configuredBoardIndices() const
+{
+    QList<int> result;
+    const int count = qMin(connectedInterfaceCount(), m_boardConfigRows.size());
+    for (int boardIndex = 0; boardIndex < count; ++boardIndex) {
+        if (!boardInterfaceName(boardIndex).isEmpty()) {
+            result << boardIndex;
+        }
+    }
+    return result;
+}
+
+QList<int> MainWindow::connectedBoardIndices() const
+{
+    QList<int> result;
+    for (int boardIndex = 0; boardIndex < m_boardRuntimes.size(); ++boardIndex) {
+        const BoardRuntime &runtime = m_boardRuntimes[boardIndex];
+        if (runtime.connected && runtime.controller && runtime.controller->isConnected()) {
+            result << boardIndex;
+        }
+    }
+    return result;
+}
+
+QString MainWindow::boardInterfaceName(int boardIndex) const
+{
+    if (boardIndex < 0 || boardIndex >= m_boardConfigRows.size()) {
+        return QString();
+    }
+    const BoardConfigRow &row = m_boardConfigRows[boardIndex];
+    if (row.interfaceCombo) {
+        return row.interfaceCombo->currentText().trimmed();
+    }
+    return row.preferredInterfaceName;
+}
+
+QString MainWindow::boardDisplayName(int boardIndex) const
+{
+    return zh("e69dbf2531").arg(boardIndex + 1);
+}
+
+QString MainWindow::boardLogPrefix(int boardIndex) const
+{
+    const QString interfaceName = boardInterfaceName(boardIndex);
+    if (interfaceName.isEmpty()) {
+        return QStringLiteral("[%1]").arg(boardDisplayName(boardIndex));
+    }
+    return QStringLiteral("[%1 %2]").arg(boardDisplayName(boardIndex), interfaceName);
+}
+
+int MainWindow::currentDebugBoardIndex() const
+{
+    if (!m_debugBoardCombo || m_debugBoardCombo->count() <= 0) {
+        return -1;
+    }
+    return m_debugBoardCombo->currentData().toInt();
+}
+
+quint8 MainWindow::currentDebugNodeId() const
+{
+    const int boardIndex = currentDebugBoardIndex();
+    return comboNodeValue(m_debugNodeCombo, boardIndex >= 0 ? boardTurnNodeId(boardIndex) : 0);
+}
+
+ODriveMotorController *MainWindow::currentDebugController() const
+{
+    const int boardIndex = currentDebugBoardIndex();
+    if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size()) {
+        return nullptr;
+    }
+    return m_boardRuntimes[boardIndex].controller;
+}
+
+int MainWindow::boardIndexForController(const ODriveMotorController *controller) const
+{
+    for (int boardIndex = 0; boardIndex < m_boardRuntimes.size(); ++boardIndex) {
+        if (m_boardRuntimes[boardIndex].controller == controller) {
+            return boardIndex;
+        }
+    }
+    return -1;
+}
+
+quint8 MainWindow::comboNodeValue(const QComboBox *combo, quint8 fallback) const
+{
+    if (!combo || combo->count() <= 0) {
+        return fallback;
+    }
+    return static_cast<quint8>(combo->currentData().toUInt() & 0x3F);
+}
+
+quint8 MainWindow::boardTurnNodeId(int boardIndex) const
+{
+    if (boardIndex < 0 || boardIndex >= m_boardConfigRows.size()) {
+        return 0;
+    }
+    const BoardConfigRow &row = m_boardConfigRows[boardIndex];
+    return comboNodeValue(row.turnNodeCombo, static_cast<quint8>(row.preferredTurnNodeId & 0x3F));
+}
+
+quint8 MainWindow::boardDriveNodeId(int boardIndex) const
+{
+    if (boardIndex < 0 || boardIndex >= m_boardConfigRows.size()) {
+        return 1;
+    }
+    const BoardConfigRow &row = m_boardConfigRows[boardIndex];
+    return comboNodeValue(row.driveNodeCombo, static_cast<quint8>(row.preferredDriveNodeId & 0x3F));
+}
+
+double MainWindow::boardScale(int boardIndex, bool turnAxis) const
+{
+    if (boardIndex < 0 || boardIndex >= m_boardConfigRows.size()) {
+        return 1.0;
+    }
+    const BoardConfigRow &row = m_boardConfigRows[boardIndex];
+    const QDoubleSpinBox *spin = turnAxis ? row.turnScaleSpin : row.driveScaleSpin;
+    return spin ? qMax(0.0001, spin->value()) : 1.0;
 }
 
 void MainWindow::updateConnectionEditorHints()
@@ -2214,7 +2909,7 @@ void MainWindow::updateConnectionEditorHints()
             ? QStringLiteral("USB serial transport baud for SLCAN probing. CANgaroo commonly uses 1000000; other adapters may use 2000000 or 115200.")
             : QStringLiteral("Serial transport baud is ignored for the selected plugin.");
     m_serialBaudSpin->setToolTip(transportTip);
-    m_serialBaudSpin->setEnabled(!m_controller->isConnected() && serialTransport);
+    m_serialBaudSpin->setEnabled(!hasAnyConnectedBoard() && serialTransport);
 }
 
 void MainWindow::updateLinkStatusDisplay()
@@ -2223,7 +2918,7 @@ void MainWindow::updateLinkStatusDisplay()
         return;
     }
 
-    if (!m_controller->isConnected()) {
+    if (!hasAnyConnectedBoard()) {
         m_linkStatusLabel->setText(zh("e69caae8bf9ee68ea5"));
         m_linkStatusLabel->setStyleSheet(QStringLiteral("QLabel { color: #9c2f2f; font-weight: 600; font-size: 18px; }"));
         return;
@@ -2254,12 +2949,17 @@ void MainWindow::updateLinkStatusDisplay()
 bool MainWindow::hasAnyTrackedNodeResponse() const
 {
     const QDateTime now = QDateTime::currentDateTime();
-    const QList<quint8> nodeIds = m_controller->trackedNodeIds();
-
-    for (const quint8 nodeId : nodeIds) {
-        const ODriveMotorController::AxisStatus &status = m_controller->status(nodeId);
-        if (status.lastMessage.isValid() && status.lastMessage.msecsTo(now) <= 2000) {
-            return true;
+    for (const int boardIndex : connectedBoardIndices()) {
+        const BoardRuntime &runtime = m_boardRuntimes[boardIndex];
+        if (!runtime.controller) {
+            continue;
+        }
+        const QList<quint8> nodeIds = runtime.controller->trackedNodeIds();
+        for (const quint8 nodeId : nodeIds) {
+            const ODriveMotorController::AxisStatus &status = runtime.controller->status(nodeId);
+            if (status.lastMessage.isValid() && status.lastMessage.msecsTo(now) <= 2000) {
+                return true;
+            }
         }
     }
 
@@ -2271,24 +2971,32 @@ bool MainWindow::hasFreshTrackedHeartbeat() const
     constexpr qint64 heartbeatTimeoutMs = 1500;
 
     const QDateTime now = QDateTime::currentDateTime();
-    QList<quint8> nodeIds = m_controller->trackedNodeIds();
-    if (nodeIds.isEmpty()) {
-        nodeIds << m_controller->nodeId();
-    }
-
-    for (const quint8 nodeId : nodeIds) {
-        const ODriveMotorController::AxisStatus &status = m_controller->status(nodeId);
-        if (!status.lastHeartbeat.isValid()) {
+    for (const int boardIndex : connectedBoardIndices()) {
+        const BoardRuntime &runtime = m_boardRuntimes[boardIndex];
+        if (!runtime.controller) {
             continue;
         }
-
-        qint64 ageMs = status.lastHeartbeat.msecsTo(now);
-        if (ageMs < 0) {
-            ageMs = 0;
+        QList<quint8> nodeIds = runtime.controller->trackedNodeIds();
+        if (nodeIds.isEmpty()) {
+            nodeIds << boardTurnNodeId(boardIndex);
+            if (!nodeIds.contains(boardDriveNodeId(boardIndex))) {
+                nodeIds << boardDriveNodeId(boardIndex);
+            }
         }
+        for (const quint8 nodeId : nodeIds) {
+            const ODriveMotorController::AxisStatus &status = runtime.controller->status(nodeId);
+            if (!status.lastHeartbeat.isValid()) {
+                continue;
+            }
 
-        if (ageMs <= heartbeatTimeoutMs) {
-            return true;
+            qint64 ageMs = status.lastHeartbeat.msecsTo(now);
+            if (ageMs < 0) {
+                ageMs = 0;
+            }
+
+            if (ageMs <= heartbeatTimeoutMs) {
+                return true;
+            }
         }
     }
 
@@ -2308,16 +3016,31 @@ void MainWindow::advanceScanStateMachine()
         return;
     }
 
+    const QList<int> boardIndices = connectedBoardIndices();
+    if (boardIndices.isEmpty()) {
+        return;
+    }
+
+    const auto allBoardsReached = [this, &boardIndices](double targetMm, bool turnAxis) {
+        for (const int boardIndex : boardIndices) {
+            const quint8 nodeId = turnAxis ? boardTurnNodeId(boardIndex) : boardDriveNodeId(boardIndex);
+            if (!axisReached(boardIndex, nodeId, targetMm, turnAxis)) {
+                return false;
+            }
+        }
+        return true;
+    };
+
     switch (m_scanState.phase) {
     case ScanHoming:
-        if (axisReached(turnNodeId(), 0.0, true) && axisReached(driveNodeId(), 0.0, false)) {
+        if (allBoardsReached(0.0, true) && allBoardsReached(0.0, false)) {
             m_scanState.phase = ScanSweeping;
             m_scanState.forward = true;
             startScanSweep(m_scanAxisLengthSpin->value());
         }
         break;
     case ScanSweeping:
-        if (axisReached(driveNodeId(), m_scanState.scanTargetMm, false)) {
+        if (allBoardsReached(m_scanState.scanTargetMm, false)) {
             if (m_scanState.currentStepMm >= m_scanState.maxStepMm - 0.2) {
                 m_scanState = ScanState();
                 updateProgramStatus(zh("e689abe68f8fe5ae8ce68890"));
@@ -2336,16 +3059,19 @@ void MainWindow::advanceScanStateMachine()
             }
 
             m_scanState.phase = ScanStepping;
-            commandAxisPosition(turnNodeId(),
-                                m_scanState.stepTargetMm,
-                                qMax(0.1, m_jogSpeedSpin->value()),
-                                true);
+            for (const int boardIndex : boardIndices) {
+                commandAxisPosition(boardIndex,
+                                    boardTurnNodeId(boardIndex),
+                                    m_scanState.stepTargetMm,
+                                    qMax(0.1, m_jogSpeedSpin->value()),
+                                    true);
+            }
             updateProgramStatus(zh("e6ada5e8bf9be8bdb4e5898de8bf9be588b0202531206d6d")
                                 .arg(QString::number(m_scanState.stepTargetMm, 'f', 2)));
         }
         break;
     case ScanStepping:
-        if (axisReached(turnNodeId(), m_scanState.stepTargetMm, true)) {
+        if (allBoardsReached(m_scanState.stepTargetMm, true)) {
             m_scanState.currentStepMm = m_scanState.stepTargetMm;
 
             const ScanModeOption mode =
@@ -2357,13 +3083,19 @@ void MainWindow::advanceScanStateMachine()
                 startScanSweep(m_scanState.forward ? m_scanAxisLengthSpin->value() : 0.0);
             } else {
                 m_scanState.phase = ScanReturning;
-                commandAxisPosition(driveNodeId(), 0.0, m_scanSpeedSpin->value(), false);
+                for (const int boardIndex : boardIndices) {
+                    commandAxisPosition(boardIndex,
+                                        boardDriveNodeId(boardIndex),
+                                        0.0,
+                                        m_scanSpeedSpin->value(),
+                                        false);
+                }
                 updateProgramStatus(zh("e689abe68f8fe8bdb4e8bf94e59b9ee8b5b7e782b9"));
             }
         }
         break;
     case ScanReturning:
-        if (axisReached(driveNodeId(), 0.0, false)) {
+        if (allBoardsReached(0.0, false)) {
             m_scanState.phase = ScanSweeping;
             m_scanState.forward = true;
             startScanSweep(m_scanAxisLengthSpin->value());
@@ -2378,127 +3110,149 @@ void MainWindow::advanceScanStateMachine()
 void MainWindow::startScanSweep(double targetMm)
 {
     m_scanState.scanTargetMm = targetMm;
-    commandAxisPosition(driveNodeId(), targetMm, m_scanSpeedSpin->value(), false);
+    for (const int boardIndex : connectedBoardIndices()) {
+        commandAxisPosition(boardIndex,
+                            boardDriveNodeId(boardIndex),
+                            targetMm,
+                            m_scanSpeedSpin->value(),
+                            false);
+    }
     updateProgramStatus(zh("e689abe68f8fe8bdb4e7a7bbe58aa8e588b0202531206d6d").arg(QString::number(targetMm, 'f', 2)));
 }
 
-bool MainWindow::ensureAxisClosedLoop(quint8 nodeId)
+bool MainWindow::ensureAxisClosedLoop(int boardIndex, quint8 nodeId)
 {
-    return m_controller->requestClosedLoop(nodeId);
+    if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size() || !m_boardRuntimes[boardIndex].controller) {
+        return false;
+    }
+    return m_boardRuntimes[boardIndex].controller->requestClosedLoop(nodeId);
 }
 
-bool MainWindow::commandAxisVelocity(quint8 nodeId, double speedMmPerSecond, bool turnAxis)
+bool MainWindow::commandAxisVelocity(int boardIndex, quint8 nodeId, double speedMmPerSecond, bool turnAxis)
 {
-    if (!m_controller->isConnected()) {
+    if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size()) {
+        return false;
+    }
+    ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
+    if (!controller || !controller->isConnected()) {
         return false;
     }
 
-    ensureAxisClosedLoop(nodeId);
+    ensureAxisClosedLoop(boardIndex, nodeId);
     const double velocityLimitMmPerSecond = qMax(qAbs(speedMmPerSecond), 0.1);
-    m_controller->setLimits(nodeId,
-                            static_cast<float>(mmPerSecondToTurnsPerSecond(velocityLimitMmPerSecond, turnAxis)),
-                            static_cast<float>(currentLimitAmps()));
-    m_controller->setControllerMode(nodeId,
-                                    ODriveMotorController::VelocityControl,
-                                    ODriveMotorController::Passthrough);
-    return m_controller->setVelocity(nodeId,
-                                     static_cast<float>(mmPerSecondToTurnsPerSecond(speedMmPerSecond, turnAxis)),
-                                     0.0f);
+    controller->setLimits(nodeId,
+                          static_cast<float>(mmPerSecondToTurnsPerSecond(boardIndex, velocityLimitMmPerSecond, turnAxis)),
+                          static_cast<float>(currentLimitAmps()));
+    controller->setControllerMode(nodeId,
+                                  ODriveMotorController::VelocityControl,
+                                  ODriveMotorController::Passthrough);
+    return controller->setVelocity(nodeId,
+                                   static_cast<float>(mmPerSecondToTurnsPerSecond(boardIndex, speedMmPerSecond, turnAxis)),
+                                   0.0f);
 }
 
-bool MainWindow::commandAxisPosition(quint8 nodeId,
+bool MainWindow::commandAxisPosition(int boardIndex,
+                                     quint8 nodeId,
                                      double targetMm,
                                      double speedMmPerSecond,
                                      bool turnAxis)
 {
-    if (!m_controller->isConnected()) {
+    if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size()) {
+        return false;
+    }
+    ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
+    if (!controller || !controller->isConnected()) {
         return false;
     }
 
-    ensureAxisClosedLoop(nodeId);
-    m_controller->setLimits(nodeId,
-                            static_cast<float>(mmPerSecondToTurnsPerSecond(qMax(0.1, speedMmPerSecond), turnAxis)),
-                            static_cast<float>(currentLimitAmps()));
-    m_controller->setControllerMode(nodeId,
-                                    ODriveMotorController::PositionControl,
-                                    ODriveMotorController::Passthrough);
-    return m_controller->setPosition(nodeId,
-                                     static_cast<float>(axisAbsoluteTurns(nodeId, targetMm, turnAxis)),
-                                     0.0f,
-                                     0.0f);
+    ensureAxisClosedLoop(boardIndex, nodeId);
+    controller->setLimits(nodeId,
+                          static_cast<float>(mmPerSecondToTurnsPerSecond(boardIndex, qMax(0.1, speedMmPerSecond), turnAxis)),
+                          static_cast<float>(currentLimitAmps()));
+    controller->setControllerMode(nodeId,
+                                  ODriveMotorController::PositionControl,
+                                  ODriveMotorController::Passthrough);
+    return controller->setPosition(nodeId,
+                                   static_cast<float>(axisAbsoluteTurns(boardIndex, nodeId, targetMm, turnAxis)),
+                                   0.0f,
+                                   0.0f);
 }
 
 void MainWindow::stopAllMotion(bool requestIdleState)
 {
-    if (!m_controller->isConnected()) {
-        return;
-    }
+    for (const int boardIndex : connectedBoardIndices()) {
+        ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
+        if (!controller) {
+            continue;
+        }
+        QList<quint8> nodeIds;
+        nodeIds << boardTurnNodeId(boardIndex);
+        if (!nodeIds.contains(boardDriveNodeId(boardIndex))) {
+            nodeIds << boardDriveNodeId(boardIndex);
+        }
 
-    QList<quint8> nodeIds;
-    nodeIds << turnNodeId();
-    if (!nodeIds.contains(driveNodeId())) {
-        nodeIds << driveNodeId();
-    }
-
-    for (const quint8 nodeId : nodeIds) {
-        m_controller->setControllerMode(nodeId,
-                                        ODriveMotorController::VelocityControl,
-                                        ODriveMotorController::Passthrough);
-        m_controller->setVelocity(nodeId, 0.0f, 0.0f);
-        if (requestIdleState) {
-            m_controller->requestIdle(nodeId);
+        for (const quint8 nodeId : nodeIds) {
+            controller->setControllerMode(nodeId,
+                                          ODriveMotorController::VelocityControl,
+                                          ODriveMotorController::Passthrough);
+            controller->setVelocity(nodeId, 0.0f, 0.0f);
+            if (requestIdleState) {
+                controller->requestIdle(nodeId);
+            }
         }
     }
 }
 
-bool MainWindow::axisReached(quint8 nodeId, double targetMm, bool turnAxis, double toleranceMm) const
+bool MainWindow::axisReached(int boardIndex, quint8 nodeId, double targetMm, bool turnAxis, double toleranceMm) const
 {
-    return qAbs(axisPositionMm(nodeId, turnAxis) - targetMm) <= toleranceMm;
+    return qAbs(axisPositionMm(boardIndex, nodeId, turnAxis) - targetMm) <= toleranceMm;
 }
 
-double MainWindow::axisPositionMm(quint8 nodeId, bool turnAxis) const
+double MainWindow::axisPositionMm(int boardIndex, quint8 nodeId, bool turnAxis) const
 {
-    const double turns = m_controller->status(nodeId).positionTurns;
-    const double zeroTurns = turnAxis ? m_turnZeroTurns : m_driveZeroTurns;
-    return turnsToMm(turns - zeroTurns, turnAxis);
+    if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size() || !m_boardRuntimes[boardIndex].controller) {
+        return 0.0;
+    }
+    const double turns = m_boardRuntimes[boardIndex].controller->status(nodeId).positionTurns;
+    const double zeroTurns = turnAxis ? m_boardRuntimes[boardIndex].turnZeroTurns : m_boardRuntimes[boardIndex].driveZeroTurns;
+    return (turns - zeroTurns) * mmPerTurn(boardIndex, turnAxis);
 }
 
-double MainWindow::axisAbsoluteTurns(quint8 nodeId, double targetMm, bool turnAxis) const
+double MainWindow::axisAbsoluteTurns(int boardIndex, quint8 nodeId, double targetMm, bool turnAxis) const
 {
     Q_UNUSED(nodeId);
-    const double zeroTurns = turnAxis ? m_turnZeroTurns : m_driveZeroTurns;
-    return zeroTurns + mmToTurns(targetMm, turnAxis);
+    if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size()) {
+        return 0.0;
+    }
+    const double zeroTurns = turnAxis ? m_boardRuntimes[boardIndex].turnZeroTurns : m_boardRuntimes[boardIndex].driveZeroTurns;
+    return zeroTurns + (targetMm / mmPerTurn(boardIndex, turnAxis));
 }
 
 double MainWindow::turnsToMm(double turns, bool turnAxis) const
 {
-    return turns * mmPerTurn(turnAxis);
+    const int boardIndex = currentDebugBoardIndex();
+    return turns * mmPerTurn(boardIndex, turnAxis);
 }
 
 double MainWindow::mmToTurns(double mm, bool turnAxis) const
 {
-    return mm / mmPerTurn(turnAxis);
+    const int boardIndex = currentDebugBoardIndex();
+    return mm / mmPerTurn(boardIndex, turnAxis);
 }
 
-double MainWindow::mmPerTurn(bool turnAxis) const
+double MainWindow::mmPerTurn(int boardIndex, bool turnAxis) const
 {
-    const QDoubleSpinBox *spin = turnAxis ? m_turnScaleSpin : m_driveScaleSpin;
-    return spin ? qMax(0.0001, spin->value()) : 1.0;
+    return boardScale(boardIndex, turnAxis);
 }
 
-double MainWindow::mmPerSecondToTurnsPerSecond(double mmPerSecond, bool turnAxis) const
+double MainWindow::mmPerSecondToTurnsPerSecond(int boardIndex, double mmPerSecond, bool turnAxis) const
 {
-    return mmToTurns(mmPerSecond, turnAxis);
+    return mmPerSecond / mmPerTurn(boardIndex, turnAxis);
 }
 
-quint8 MainWindow::turnNodeId() const
+int MainWindow::connectedInterfaceCount() const
 {
-    return static_cast<quint8>(m_turnNodeIdSpin ? (m_turnNodeIdSpin->value() & 0x3F) : 0);
-}
-
-quint8 MainWindow::driveNodeId() const
-{
-    return static_cast<quint8>(m_driveNodeIdSpin ? (m_driveNodeIdSpin->value() & 0x3F) : 1);
+    return m_interfaceCountCombo ? qMax(1, m_interfaceCountCombo->currentData().toInt()) : 1;
 }
 
 double MainWindow::currentLimitAmps() const

@@ -1,7 +1,17 @@
+        "Keys": [
+            "webgl"
+        ]
+    },
+    "archreq": 1,
+    "className": "QWebGLIntegrationPlugin",
+    "debug": true,
+    "version": 330752
+}
 
-[20:44:24.341] [DEBUG] Got keys from plugin meta data ("webgl")
-[20:44:24.355] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll"
-[20:44:24.370] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll, metadata=
+
+[20:40:50.146] [DEBUG] Got keys from plugin meta data ("webgl")
+[20:40:50.159] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll"
+[20:40:50.172] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
     "MetaData": {
@@ -16,10 +26,10 @@
 }
 
 
-[20:44:24.383] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
+[20:40:50.185] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
          not a plugin
-[20:44:24.397] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindowsd.dll"
-[20:44:24.412] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qwindowsd.dll, metadata=
+[20:40:50.201] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindowsd.dll"
+[20:40:50.214] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qwindowsd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
     "MetaData": {
@@ -34,45 +44,45 @@
 }
 
 
-[20:44:24.427] [DEBUG] Got keys from plugin meta data ("windows")
-[20:44:24.441] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug" ...
-[20:44:24.458] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/D3Dcompiler_47.dll"
-[20:44:24.487] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/D3Dcompiler_47.dll'" 
+[20:40:50.228] [DEBUG] Got keys from plugin meta data ("windows")
+[20:40:50.245] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug" ...
+[20:40:50.263] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/D3Dcompiler_47.dll"
+[20:40:50.292] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/D3Dcompiler_47.dll'" 
          not a plugin
-[20:44:24.489] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/libEGLd.dll"
-[20:44:24.505] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/libEGLd.dll'" 
+[20:40:50.293] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/libEGLd.dll"
+[20:40:50.310] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/libEGLd.dll'" 
          not a plugin
-[20:44:24.521] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/libGLESV2d.dll"
-[20:44:24.600] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/libGLESV2d.dll'" 
+[20:40:50.323] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/libGLESV2d.dll"
+[20:40:50.401] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/libGLESV2d.dll'" 
          not a plugin
-[20:44:24.602] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/opengl32sw.dll"
-[20:44:24.684] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/opengl32sw.dll'" 
+[20:40:50.404] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/opengl32sw.dll"
+[20:40:50.484] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/opengl32sw.dll'" 
          not a plugin
-[20:44:24.686] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Cored.dll"
-[20:44:24.748] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Cored.dll'" 
+[20:40:50.486] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Cored.dll"
+[20:40:50.547] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Cored.dll'" 
          not a plugin
-[20:44:24.750] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Guid.dll"
-[20:44:24.812] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Guid.dll'" 
+[20:40:50.548] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Guid.dll"
+[20:40:50.610] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Guid.dll'" 
          not a plugin
-[20:44:24.816] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Networkd.dll"
-[20:44:24.844] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Networkd.dll'" 
+[20:40:50.612] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Networkd.dll"
+[20:40:50.637] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Networkd.dll'" 
          not a plugin
-[20:44:24.847] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5SerialBusd.dll"
-[20:44:24.865] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5SerialBusd.dll'" 
+[20:40:50.639] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5SerialBusd.dll"
+[20:40:50.655] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5SerialBusd.dll'" 
          not a plugin
-[20:44:24.878] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5SerialPortd.dll"
-[20:44:24.894] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5SerialPortd.dll'" 
+[20:40:50.668] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5SerialPortd.dll"
+[20:40:50.683] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5SerialPortd.dll'" 
          not a plugin
-[20:44:24.909] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Svgd.dll"
-[20:44:24.927] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Svgd.dll'" 
+[20:40:50.697] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Svgd.dll"
+[20:40:50.710] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Svgd.dll'" 
          not a plugin
-[20:44:24.940] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Widgetsd.dll"
-[20:44:24.992] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Widgetsd.dll'" 
+[20:40:50.718] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Widgetsd.dll"
+[20:40:50.767] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Widgetsd.dll'" 
          not a plugin
-[20:44:24.994] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/platforms" ...
-[20:44:25.011] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/platforms" ...
-[20:44:25.027] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/platforms/qwindowsd.dll"
-[20:44:25.041] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/platforms/qwindowsd.dll, metadata=
+[20:40:50.769] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/platforms" ...
+[20:40:50.781] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/platforms" ...
+[20:40:50.795] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/platforms/qwindowsd.dll"
+[20:40:50.808] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/platforms/qwindowsd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
     "MetaData": {
@@ -87,13 +97,13 @@
 }
 
 
-[20:44:25.057] [DEBUG] Got keys from plugin meta data ("windows")
-[20:44:25.073] [DEBUG] Cannot load library D:\qt\5.12.4\msvc2017\plugins\platforms\qwindowsd.dll: Unknown error 0x000000c1.
-[20:44:25.089] [WARN ] QLibraryPrivate::loadPlugin failed on "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindowsd.dll" : "Cannot load library D:\\qt\\5.12.4\\msvc2017\\plugins\\platforms\\qwindowsd.dll: Unknown error 0x000000c1."
-[20:44:25.107] [DEBUG] loaded library "D:/dev/odriveCar/debug/platforms/qwindowsd.dll"
-[20:44:25.130] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms" ...
-[20:44:25.141] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qdirect2d.dll"
-[20:44:25.162] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qdirect2d.dll, metadata=
+[20:40:50.824] [DEBUG] Got keys from plugin meta data ("windows")
+[20:40:50.836] [DEBUG] Cannot load library D:\qt\5.12.4\msvc2017\plugins\platforms\qwindowsd.dll: Unknown error 0x000000c1.
+[20:40:50.851] [WARN ] QLibraryPrivate::loadPlugin failed on "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindowsd.dll" : "Cannot load library D:\\qt\\5.12.4\\msvc2017\\plugins\\platforms\\qwindowsd.dll: Unknown error 0x000000c1."
+[20:40:50.866] [DEBUG] loaded library "D:/dev/odriveCar/debug/platforms/qwindowsd.dll"
+[20:40:50.881] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms" ...
+[20:40:50.890] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qdirect2d.dll"
+[20:40:50.902] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qdirect2d.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
     "MetaData": {
@@ -108,12 +118,12 @@
 }
 
 
-[20:44:25.178] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qdirect2d.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
+[20:40:50.915] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qdirect2d.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
          not a plugin
-[20:44:25.195] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qdirect2dd.dll"
-[20:44:25.209] [DEBUG] Got keys from plugin meta data ()
-[20:44:25.226] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qminimal.dll"
-[20:44:25.241] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qminimal.dll, metadata=
+[20:40:50.925] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qdirect2dd.dll"
+[20:40:50.937] [DEBUG] Got keys from plugin meta data ()
+[20:40:50.949] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qminimal.dll"
+[20:40:50.961] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qminimal.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
     "MetaData": {
@@ -128,12 +138,12 @@
 }
 
 
-[20:44:25.256] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qminimal.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
+[20:40:50.977] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qminimal.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
          not a plugin
-[20:44:25.270] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qminimald.dll"
-[20:44:25.285] [DEBUG] Got keys from plugin meta data ()
-[20:44:25.300] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qoffscreen.dll"
-[20:44:25.316] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qoffscreen.dll, metadata=
+[20:40:50.989] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qminimald.dll"
+[20:40:51.004] [DEBUG] Got keys from plugin meta data ()
+[20:40:51.018] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qoffscreen.dll"
+[20:40:51.030] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qoffscreen.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
     "MetaData": {
@@ -148,12 +158,12 @@
 }
 
 
-[20:44:25.331] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qoffscreen.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
+[20:40:51.045] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qoffscreen.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
          not a plugin
-[20:44:25.348] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qoffscreend.dll"
-[20:44:25.364] [DEBUG] Got keys from plugin meta data ()
-[20:44:25.381] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwebgl.dll"
-[20:44:25.397] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qwebgl.dll, metadata=
+[20:40:51.060] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qoffscreend.dll"
+[20:40:51.078] [DEBUG] Got keys from plugin meta data ()
+[20:40:51.092] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwebgl.dll"
+[20:40:51.108] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qwebgl.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
     "MetaData": {
@@ -168,12 +178,12 @@
 }
 
 
-[20:44:25.411] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qwebgl.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
+[20:40:51.120] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qwebgl.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
          not a plugin
-[20:44:25.426] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwebgld.dll"
-[20:44:25.442] [DEBUG] Got keys from plugin meta data ()
-[20:44:25.459] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll"
-[20:44:25.473] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll, metadata=
+[20:40:51.131] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwebgld.dll"
+[20:40:51.145] [DEBUG] Got keys from plugin meta data ()
+[20:40:51.161] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll"
+[20:40:51.177] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
     "MetaData": {
@@ -188,51 +198,51 @@
 }
 
 
-[20:44:25.488] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
+[20:40:51.192] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
          not a plugin
-[20:44:25.502] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindowsd.dll"
-[20:44:25.518] [DEBUG] "Cannot load library D:\\qt\\5.12.4\\msvc2017\\plugins\\platforms\\qwindowsd.dll: Unknown error 0x000000c1." 
+[20:40:51.204] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindowsd.dll"
+[20:40:51.216] [DEBUG] "Cannot load library D:\\qt\\5.12.4\\msvc2017\\plugins\\platforms\\qwindowsd.dll: Unknown error 0x000000c1." 
          not a plugin
-[20:44:25.531] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug" ...
-[20:44:25.547] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/D3Dcompiler_47.dll"
-[20:44:25.575] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/D3Dcompiler_47.dll'" 
+[20:40:51.226] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug" ...
+[20:40:51.239] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/D3Dcompiler_47.dll"
+[20:40:51.265] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/D3Dcompiler_47.dll'" 
          not a plugin
-[20:44:25.577] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/libEGLd.dll"
-[20:44:25.596] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/libEGLd.dll'" 
+[20:40:51.267] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/libEGLd.dll"
+[20:40:51.281] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/libEGLd.dll'" 
          not a plugin
-[20:44:25.611] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/libGLESV2d.dll"
-[20:44:25.686] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/libGLESV2d.dll'" 
+[20:40:51.294] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/libGLESV2d.dll"
+[20:40:51.373] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/libGLESV2d.dll'" 
          not a plugin
-[20:44:25.688] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/opengl32sw.dll"
-[20:44:25.770] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/opengl32sw.dll'" 
+[20:40:51.375] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/opengl32sw.dll"
+[20:40:51.453] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/opengl32sw.dll'" 
          not a plugin
-[20:44:25.772] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Cored.dll"
-[20:44:25.831] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Cored.dll'" 
+[20:40:51.455] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Cored.dll"
+[20:40:51.515] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Cored.dll'" 
          not a plugin
-[20:44:25.834] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Guid.dll"
-[20:44:25.898] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Guid.dll'" 
+[20:40:51.517] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Guid.dll"
+[20:40:51.579] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Guid.dll'" 
          not a plugin
-[20:44:25.901] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Networkd.dll"
-[20:44:25.931] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Networkd.dll'" 
+[20:40:51.581] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Networkd.dll"
+[20:40:51.602] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Networkd.dll'" 
          not a plugin
-[20:44:25.932] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5SerialBusd.dll"
-[20:44:25.949] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5SerialBusd.dll'" 
+[20:40:51.605] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5SerialBusd.dll"
+[20:40:51.619] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5SerialBusd.dll'" 
          not a plugin
-[20:44:25.962] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5SerialPortd.dll"
-[20:44:25.979] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5SerialPortd.dll'" 
+[20:40:51.629] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5SerialPortd.dll"
+[20:40:51.643] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5SerialPortd.dll'" 
          not a plugin
-[20:44:25.990] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Svgd.dll"
-[20:44:26.007] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Svgd.dll'" 
+[20:40:51.655] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Svgd.dll"
+[20:40:51.671] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Svgd.dll'" 
          not a plugin
-[20:44:26.018] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Widgetsd.dll"
-[20:44:26.069] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Widgetsd.dll'" 
+[20:40:51.683] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Widgetsd.dll"
+[20:40:51.733] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Widgetsd.dll'" 
          not a plugin
-[20:44:26.072] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/platformthemes" ...
-[20:44:26.089] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/platformthemes" ...
-[20:44:26.107] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/styles" ...
-[20:44:26.119] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/styles" ...
-[20:44:26.134] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/styles/qwindowsvistastyled.dll"
-[20:44:26.148] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/styles/qwindowsvistastyled.dll, metadata=
+[20:40:51.736] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/platformthemes" ...
+[20:40:51.748] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/platformthemes" ...
+[20:40:51.768] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/styles" ...
+[20:40:51.784] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/styles" ...
+[20:40:51.798] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/styles/qwindowsvistastyled.dll"
+[20:40:51.813] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/styles/qwindowsvistastyled.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QStyleFactoryInterface",
     "MetaData": {
@@ -247,13 +257,13 @@
 }
 
 
-[20:44:26.162] [DEBUG] Got keys from plugin meta data ("windowsvista")
-[20:44:26.177] [DEBUG] loaded library "D:/dev/odriveCar/debug/styles/qwindowsvistastyled.dll"
-[20:44:26.192] [INFO ] Application dir: D:/dev/odriveCar/debug
-[20:44:26.206] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/canbus" ...
-[20:44:26.217] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/canbus" ...
-[20:44:26.233] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtpassthrucanbusd.dll"
-[20:44:26.247] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtpassthrucanbusd.dll, metadata=
+[20:40:51.827] [DEBUG] Got keys from plugin meta data ("windowsvista")
+[20:40:51.839] [DEBUG] loaded library "D:/dev/odriveCar/debug/styles/qwindowsvistastyled.dll"
+[20:40:51.854] [INFO ] Application dir: D:/dev/odriveCar/debug
+[20:40:51.865] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/canbus" ...
+[20:40:51.884] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/canbus" ...
+[20:40:51.905] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtpassthrucanbusd.dll"
+[20:40:51.924] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtpassthrucanbusd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QCanBusFactory",
     "MetaData": {
@@ -266,9 +276,9 @@
 }
 
 
-[20:44:26.263] [DEBUG] Got keys from plugin meta data ()
-[20:44:26.277] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtpeakcanbusd.dll"
-[20:44:26.293] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtpeakcanbusd.dll, metadata=
+[20:40:51.937] [DEBUG] Got keys from plugin meta data ()
+[20:40:51.952] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtpeakcanbusd.dll"
+[20:40:51.969] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtpeakcanbusd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QCanBusFactory",
     "MetaData": {
@@ -281,9 +291,9 @@
 }
 
 
-[20:44:26.308] [DEBUG] Got keys from plugin meta data ()
-[20:44:26.324] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtsysteccanbusd.dll"
-[20:44:26.341] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtsysteccanbusd.dll, metadata=
+[20:40:51.985] [DEBUG] Got keys from plugin meta data ()
+[20:40:52.000] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtsysteccanbusd.dll"
+[20:40:52.015] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtsysteccanbusd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QCanBusFactory",
     "MetaData": {
@@ -296,9 +306,9 @@
 }
 
 
-[20:44:26.356] [DEBUG] Got keys from plugin meta data ()
-[20:44:26.372] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qttinycanbusd.dll"
-[20:44:26.388] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qttinycanbusd.dll, metadata=
+[20:40:52.030] [DEBUG] Got keys from plugin meta data ()
+[20:40:52.042] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qttinycanbusd.dll"
+[20:40:52.056] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qttinycanbusd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QCanBusFactory",
     "MetaData": {
@@ -311,9 +321,9 @@
 }
 
 
-[20:44:26.405] [DEBUG] Got keys from plugin meta data ()
-[20:44:26.421] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtvectorcanbusd.dll"
-[20:44:26.436] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtvectorcanbusd.dll, metadata=
+[20:40:52.067] [DEBUG] Got keys from plugin meta data ()
+[20:40:52.083] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtvectorcanbusd.dll"
+[20:40:52.096] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtvectorcanbusd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QCanBusFactory",
     "MetaData": {
@@ -326,9 +336,9 @@
 }
 
 
-[20:44:26.450] [DEBUG] Got keys from plugin meta data ()
-[20:44:26.464] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtvirtualcanbusd.dll"
-[20:44:26.480] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtvirtualcanbusd.dll, metadata=
+[20:40:52.109] [DEBUG] Got keys from plugin meta data ()
+[20:40:52.125] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtvirtualcanbusd.dll"
+[20:40:52.137] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtvirtualcanbusd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QCanBusFactory",
     "MetaData": {
@@ -341,12 +351,12 @@
 }
 
 
-[20:44:26.497] [DEBUG] Got keys from plugin meta data ()
-[20:44:26.513] [INFO ] Qt CAN plugins: passthrucan, peakcan, systeccan, tinycan, vectorcan, virtualcan
-[20:44:26.529] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/iconengines" ...
-[20:44:26.543] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/iconengines" ...
-[20:44:26.558] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/iconengines/qsvgicond.dll"
-[20:44:26.573] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/iconengines/qsvgicond.dll, metadata=
+[20:40:52.148] [DEBUG] Got keys from plugin meta data ()
+[20:40:52.160] [INFO ] Qt CAN plugins: passthrucan, peakcan, systeccan, tinycan, vectorcan, virtualcan
+[20:40:52.172] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/iconengines" ...
+[20:40:52.181] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/iconengines" ...
+[20:40:52.193] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/iconengines/qsvgicond.dll"
+[20:40:52.208] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/iconengines/qsvgicond.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QIconEngineFactoryInterface",
     "MetaData": {
@@ -363,11 +373,11 @@
 }
 
 
-[20:44:26.588] [DEBUG] Got keys from plugin meta data ("svg", "svgz", "svg.gz")
-[20:44:26.844] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/imageformats" ...
-[20:44:26.845] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/imageformats" ...
-[20:44:26.864] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qgifd.dll"
-[20:44:26.881] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qgifd.dll, metadata=
+[20:40:52.221] [DEBUG] Got keys from plugin meta data ("svg", "svgz", "svg.gz")
+[20:40:52.466] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/imageformats" ...
+[20:40:52.467] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/imageformats" ...
+[20:40:52.481] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qgifd.dll"
+[20:40:52.495] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qgifd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -385,9 +395,9 @@
 }
 
 
-[20:44:26.896] [DEBUG] Got keys from plugin meta data ("gif")
-[20:44:26.912] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qicnsd.dll"
-[20:44:26.928] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qicnsd.dll, metadata=
+[20:40:52.510] [DEBUG] Got keys from plugin meta data ("gif")
+[20:40:52.525] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qicnsd.dll"
+[20:40:52.543] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qicnsd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -405,9 +415,9 @@
 }
 
 
-[20:44:26.943] [DEBUG] Got keys from plugin meta data ("icns")
-[20:44:26.958] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qicod.dll"
-[20:44:26.975] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qicod.dll, metadata=
+[20:40:52.559] [DEBUG] Got keys from plugin meta data ("icns")
+[20:40:52.577] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qicod.dll"
+[20:40:52.597] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qicod.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -427,9 +437,9 @@
 }
 
 
-[20:44:26.992] [DEBUG] Got keys from plugin meta data ("ico", "cur")
-[20:44:27.007] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qjpegd.dll"
-[20:44:27.023] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qjpegd.dll, metadata=
+[20:40:52.610] [DEBUG] Got keys from plugin meta data ("ico", "cur")
+[20:40:52.624] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qjpegd.dll"
+[20:40:52.640] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qjpegd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -449,9 +459,9 @@
 }
 
 
-[20:44:27.039] [DEBUG] Got keys from plugin meta data ("jpg", "jpeg")
-[20:44:27.055] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qsvgd.dll"
-[20:44:27.072] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qsvgd.dll, metadata=
+[20:40:52.653] [DEBUG] Got keys from plugin meta data ("jpg", "jpeg")
+[20:40:52.669] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qsvgd.dll"
+[20:40:52.686] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qsvgd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -471,9 +481,9 @@
 }
 
 
-[20:44:27.085] [DEBUG] Got keys from plugin meta data ("svg", "svgz")
-[20:44:27.096] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qtgad.dll"
-[20:44:27.109] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qtgad.dll, metadata=
+[20:40:52.701] [DEBUG] Got keys from plugin meta data ("svg", "svgz")
+[20:40:52.715] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qtgad.dll"
+[20:40:52.730] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qtgad.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -491,9 +501,9 @@
 }
 
 
-[20:44:27.122] [DEBUG] Got keys from plugin meta data ("tga")
-[20:44:27.137] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qtiffd.dll"
-[20:44:27.152] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qtiffd.dll, metadata=
+[20:40:52.744] [DEBUG] Got keys from plugin meta data ("tga")
+[20:40:52.760] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qtiffd.dll"
+[20:40:52.773] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qtiffd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -513,9 +523,9 @@
 }
 
 
-[20:44:27.163] [DEBUG] Got keys from plugin meta data ("tiff", "tif")
-[20:44:27.175] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qwbmpd.dll"
-[20:44:27.192] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qwbmpd.dll, metadata=
+[20:40:52.787] [DEBUG] Got keys from plugin meta data ("tiff", "tif")
+[20:40:52.804] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qwbmpd.dll"
+[20:40:52.820] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qwbmpd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -533,9 +543,9 @@
 }
 
 
-[20:44:27.209] [DEBUG] Got keys from plugin meta data ("wbmp")
-[20:44:27.224] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qwebpd.dll"
-[20:44:27.241] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qwebpd.dll, metadata=
+[20:40:52.837] [DEBUG] Got keys from plugin meta data ("wbmp")
+[20:40:52.857] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qwebpd.dll"
+[20:40:52.871] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qwebpd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -553,48 +563,38 @@
 }
 
 
-[20:44:27.256] [DEBUG] Got keys from plugin meta data ("webp")
-[20:44:27.271] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qgifd.dll"
-[20:44:27.285] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qicnsd.dll"
-[20:44:27.302] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qicod.dll"
-[20:44:27.316] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qjpegd.dll"
-[20:44:27.333] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qsvgd.dll"
-[20:44:27.349] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qtgad.dll"
-[20:44:27.367] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qtiffd.dll"
-[20:44:27.379] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qwbmpd.dll"
-[20:44:27.395] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qwebpd.dll"
-[20:44:27.916] [DEBUG] Cannot load library usbcan64: ÕÒ²»µ½Ö¸¶¨µÄÄ£¿é¡£
-[20:44:27.921] [INFO ] Refreshing CAN interfaces. plugin= candle  previousInterface= candle0
-[20:44:27.944] [INFO ] Refresh result. plugin= candle  interfaces= candle0  error= 
-[20:44:27.954] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/accessible" ...
-[20:44:27.967] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/accessible" ...
-[20:44:28.144] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/accessiblebridge" ...
-[20:44:28.146] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/accessiblebridge" ...
-[20:44:29.956] [INFO ] Connect requested. plugin= candle  interface= candle0  bitrate= 250000  nodeId= 1
-[20:44:30.119] [INFO ] connectDevice returned true
-[20:44:30.125] [INFO ] [20:44:29] candle bridge script: D:/dev/odriveCar/debug/../candle_bridge.py
-[20:44:30.131] [INFO ] [20:44:30] CAN Á´Â·ÒÑ¾ÍÐ÷
-[20:44:30.140] [INFO ] [20:44:30] candle ready: candle0
-[20:44:30.150] [INFO ] [20:44:30] ODrive heartbeat detected from node 16
-[20:44:30.165] [INFO ] [20:44:30] ODrive heartbeat detected from node 1
-[20:44:35.241] [INFO ] [20:44:35] CANDLE TX Clear_Errors id=0X218 dlc=1 payload=00
-[20:44:36.703] [INFO ] [20:44:36] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
-[20:44:38.572] [INFO ] [20:44:38] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=03 00 00 00 01 00 00 00
-[20:44:38.573] [INFO ] [20:44:38] CANDLE TX Set_Input_Pos id=0X20C dlc=8 payload=00 00 20 41 00 00 00 00
-[20:44:40.955] [INFO ] [20:44:40] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
-[20:44:40.957] [INFO ] [20:44:40] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=CD CC 4C 3E 00 00 00 00
-[20:44:44.520] [INFO ] [20:44:44] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=03 00 00 00 01 00 00 00
-[20:44:44.523] [INFO ] [20:44:44] CANDLE TX Set_Input_Pos id=0X20C dlc=8 payload=00 00 20 41 00 00 00 00
-[20:44:45.390] [INFO ] [20:44:45] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=03 00 00 00 01 00 00 00
-[20:44:45.393] [INFO ] [20:44:45] CANDLE TX Set_Input_Pos id=0X20C dlc=8 payload=00 00 20 41 00 00 00 00
-[20:44:46.747] [INFO ] [20:44:46] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=03 00 00 00 01 00 00 00
-[20:44:46.749] [INFO ] [20:44:46] CANDLE TX Set_Input_Pos id=0X20C dlc=8 payload=00 00 20 41 00 00 00 00
-[20:44:47.381] [INFO ] [20:44:47] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=03 00 00 00 01 00 00 00
-[20:44:47.383] [INFO ] [20:44:47] CANDLE TX Set_Input_Pos id=0X20C dlc=8 payload=00 00 20 41 00 00 00 00
-[20:44:49.379] [INFO ] [20:44:49] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=01 00 00 00 01 00 00 00
-[20:44:49.382] [INFO ] [20:44:49] CANDLE TX Set_Input_Torque id=0X20E dlc=4 payload=CD CC 4C 3E
-[20:44:53.251] [INFO ] [20:44:53] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=01 00 00 00
-[20:44:54.755] [INFO ] [20:44:54] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
-[20:44:56.308] [INFO ] [20:44:56] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=03 00 00 00 01 00 00 00
-[20:44:56.310] [INFO ] [20:44:56] CANDLE TX Set_Input_Pos id=0X20C dlc=8 payload=00 00 20 41 00 00 00 00
-[20:45:04.142] [INFO ] [20:45:04] CANDLE TX Estop id=0X202 dlc=0 payload=<empty>
+[20:40:52.887] [DEBUG] Got keys from plugin meta data ("webp")
+[20:40:52.902] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qgifd.dll"
+[20:40:52.915] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qicnsd.dll"
+[20:40:52.928] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qicod.dll"
+[20:40:52.941] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qjpegd.dll"
+[20:40:52.957] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qsvgd.dll"
+[20:40:52.968] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qtgad.dll"
+[20:40:52.981] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qtiffd.dll"
+[20:40:52.992] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qwbmpd.dll"
+[20:40:53.001] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qwebpd.dll"
+[20:40:53.533] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/accessible" ...
+[20:40:53.534] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/accessible" ...
+[20:40:53.549] [DEBUG] Cannot load library usbcan64: ÕÒ²»µ½Ö¸¶¨µÄÄ£¿é¡£
+[20:40:53.563] [INFO ] Refreshing CAN interfaces. plugin= candle  configuredBoards= 1
+[20:40:53.580] [INFO ] Refresh result. plugin= candle  interfaces= candle0  error= 
+[20:40:53.696] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/accessiblebridge" ...
+[20:40:53.699] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/accessiblebridge" ...
+[20:40:59.226] [INFO ] Connect requested. board= 0  plugin= candle  interface= candle0  bitrate= 250000  defaultNode= 16
+[20:40:59.395] [INFO ] [20:40:59] [°å1 candle0] candle bridge script: D:/dev/odriveCar/debug/../candle_bridge.py
+[20:40:59.397] [INFO ] [20:40:59] [°å1 candle0] CAN Á´Â·ÒÑ¾ÍÐ÷
+[20:40:59.405] [INFO ] [20:40:59] [°å1 candle0] candle ready: candle0
+[20:40:59.413] [INFO ] [20:40:59] [°å1 candle0] ODrive heartbeat detected from node 16
+[20:40:59.420] [INFO ] [20:40:59] [°å1 candle0] ODrive heartbeat detected from node 1
+[20:40:59.796] [INFO ] [20:40:59] [°å1 candle0] ÕýÔÚÉ¨Ãè½Úµã...
+[20:40:59.798] [INFO ] [20:40:59] [°å1 candle0] Probing CAN nodes 0..63 for ODrive replies.
+[20:41:01.305] [INFO ] [20:41:01] ÒÑÖ÷¶¯Ë¢ÐÂ×´Ì¬
+[20:41:01.307] [INFO ] [20:41:01] [{.X?»»µ½ Node 1
+[20:41:01.325] [INFO ] [20:41:01] [°å1 candle0] ¼ì²âµ½½Úµã: 1, 16
+[20:41:07.859] [INFO ] [20:41:07] ÒÑÖ÷¶¯Ë¢ÐÂ×´Ì¬
+[20:41:07.861] [INFO ] [20:41:07] [{.X?»»µ½ Node 16
+[20:41:11.882] [INFO ] [20:41:11] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=03 00 00 00 01 00 00 00
+[20:41:11.884] [INFO ] [20:41:11] [°å1 candle0] CANDLE TX Set_Input_Pos id=0X20C dlc=8 payload=00 00 20 C1 00 00 00 00
+[20:41:16.039] [INFO ] [20:41:15] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=01 00 00 00 01 00 00 00
+[20:41:16.042] [INFO ] [20:41:15] [°å1 candle0] CANDLE TX Set_Input_Torque id=0X20E dlc=4 payload=CD CC 4C 3E
+[20:41:20.164] [INFO ] [20:41:20] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=01 00 00 00

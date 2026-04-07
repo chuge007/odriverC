@@ -2,12 +2,15 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QList>
+#include <QString>
 #include <QVector>
 #include <QStringList>
 
 class QComboBox;
 class QDialog;
 class QDoubleSpinBox;
+class QGridLayout;
 class QLabel;
 class QLineEdit;
 class QPlainTextEdit;
@@ -16,6 +19,7 @@ class QSpinBox;
 class QCheckBox;
 class QTimer;
 class QVBoxLayout;
+class QWidget;
 class ODriveMotorController;
 
 namespace Ui {
@@ -70,6 +74,33 @@ private slots:
     void switchToDetectedNode(quint8 nodeId);
 
 private:
+    struct BoardConfigRow
+    {
+        QWidget *rowWidget = nullptr;
+        QLabel *label = nullptr;
+        QComboBox *interfaceCombo = nullptr;
+        QPushButton *scanNodesButton = nullptr;
+        QComboBox *turnNodeCombo = nullptr;
+        QComboBox *driveNodeCombo = nullptr;
+        QDoubleSpinBox *turnScaleSpin = nullptr;
+        QDoubleSpinBox *driveScaleSpin = nullptr;
+        QLabel *statusLabel = nullptr;
+        QList<quint8> detectedNodes;
+        QString preferredInterfaceName;
+        int preferredTurnNodeId = 16;
+        int preferredDriveNodeId = 1;
+    };
+
+    struct BoardRuntime
+    {
+        ODriveMotorController *controller = nullptr;
+        QList<quint8> detectedNodes;
+        double turnZeroTurns = 0.0;
+        double driveZeroTurns = 0.0;
+        bool zeroPointInitialized = false;
+        bool connected = false;
+    };
+
     enum ScanModeOption {
         BowMode = 0,
         OneWayMode = 1
@@ -101,35 +132,69 @@ private:
     void populatePlugins();
     void populateControlModes();
     void populateInputModes();
+    void buildBoardConfigRows(QGridLayout *layout, QWidget *parent);
     void loadSettings();
     void saveSettings() const;
     void connectSettingsPersistence();
     void setMotionControlsEnabled(bool enabled);
-    void updateTrackedNodes();
+    void refreshBoardInterfaceOptions();
+    void updateBoardRowVisibility();
+    void updateBoardNodeCombos(int boardIndex);
+    void updateAllBoardNodeCombos();
+    void updateBoardStatusLabel(int boardIndex, const QString &statusText = QString());
+    void updateDebugBoardCombo();
+    void updateDebugNodeCombo();
+    void updateDebugScaleSpin();
+    void refreshCurrentBoardNodes();
+    void refreshBoardNodes(int boardIndex, bool temporaryConnectionAllowed = true);
+    void connectBoardControllerSignals(int boardIndex, ODriveMotorController *controller);
+    void disconnectAllBoards();
+    void updateConnectionStateFromBoards();
     void syncConnectionEditorsFromAdvanced();
     void updateConnectionEditorHints();
     void updateLinkStatusDisplay();
+    bool hasAnyConnectedBoard() const;
+    QList<int> configuredBoardIndices() const;
+    QList<int> connectedBoardIndices() const;
+    QString boardInterfaceName(int boardIndex) const;
+    QString boardDisplayName(int boardIndex) const;
+    QString boardLogPrefix(int boardIndex) const;
+    int currentDebugBoardIndex() const;
+    quint8 currentDebugNodeId() const;
+    ODriveMotorController *currentDebugController() const;
+    int boardIndexForController(const ODriveMotorController *controller) const;
+    quint8 comboNodeValue(const QComboBox *combo, quint8 fallback = 0) const;
+    quint8 boardTurnNodeId(int boardIndex) const;
+    quint8 boardDriveNodeId(int boardIndex) const;
+    double boardScale(int boardIndex, bool turnAxis) const;
     bool hasAnyTrackedNodeResponse() const;
     bool hasFreshTrackedHeartbeat() const;
     void updateProgramStatus(const QString &message);
     void advanceScanStateMachine();
     void startScanSweep(double targetMm);
-    bool ensureAxisClosedLoop(quint8 nodeId);
-    bool commandAxisVelocity(quint8 nodeId, double speedMmPerSecond, bool turnAxis);
-    bool commandAxisPosition(quint8 nodeId,
+    bool ensureAxisClosedLoop(int boardIndex, quint8 nodeId);
+    bool commandAxisVelocity(int boardIndex,
+                             quint8 nodeId,
+                             double speedMmPerSecond,
+                             bool turnAxis);
+    bool commandAxisPosition(int boardIndex,
+                             quint8 nodeId,
                              double targetMm,
                              double speedMmPerSecond,
                              bool turnAxis);
     void stopAllMotion(bool requestIdleState);
-    bool axisReached(quint8 nodeId, double targetMm, bool turnAxis, double toleranceMm = 0.8) const;
-    double axisPositionMm(quint8 nodeId, bool turnAxis) const;
-    double axisAbsoluteTurns(quint8 nodeId, double targetMm, bool turnAxis) const;
+    bool axisReached(int boardIndex,
+                     quint8 nodeId,
+                     double targetMm,
+                     bool turnAxis,
+                     double toleranceMm = 0.8) const;
+    double axisPositionMm(int boardIndex, quint8 nodeId, bool turnAxis) const;
+    double axisAbsoluteTurns(int boardIndex, quint8 nodeId, double targetMm, bool turnAxis) const;
     double turnsToMm(double turns, bool turnAxis) const;
     double mmToTurns(double mm, bool turnAxis) const;
-    double mmPerTurn(bool turnAxis) const;
-    double mmPerSecondToTurnsPerSecond(double mmPerSecond, bool turnAxis) const;
-    quint8 turnNodeId() const;
-    quint8 driveNodeId() const;
+    double mmPerTurn(int boardIndex, bool turnAxis) const;
+    double mmPerSecondToTurnsPerSecond(int boardIndex, double mmPerSecond, bool turnAxis) const;
+    int connectedInterfaceCount() const;
     double currentLimitAmps() const;
     static QLabel *createValueLabel();
     static QLabel *createReadoutLabel();
@@ -139,19 +204,24 @@ private:
     QDialog *m_advancedDialog;
 
     QComboBox *m_pluginCombo;
-    QComboBox *m_interfaceCombo;
+    QComboBox *m_interfaceCountCombo;
     QSpinBox *m_bitrateSpin;
     QSpinBox *m_serialBaudSpin;
-    QSpinBox *m_nodeIdSpin;
     QPushButton *m_refreshInterfacesButton;
+    QPushButton *m_advancedConnectButton;
     QPushButton *m_connectButton;
     QLabel *m_linkStatusLabel;
     QLineEdit *m_ipEdit;
+    QStringList m_availableInterfaces;
+    QVector<BoardConfigRow> m_boardConfigRows;
+    QVector<BoardRuntime> m_boardRuntimes;
 
     QPushButton *m_openAdvancedButton;
-    QComboBox *m_detectedNodesCombo;
+    QComboBox *m_debugBoardCombo;
+    QComboBox *m_debugNodeCombo;
     QPushButton *m_rescanNodesButton;
     QLabel *m_activeNodesLabel;
+    QDoubleSpinBox *m_debugScaleSpin;
     QLabel *m_turnPositionLabel;
     QLabel *m_drivePositionLabel;
     QPushButton *m_setZeroButton;
@@ -172,11 +242,6 @@ private:
     QPushButton *m_scanStartButton;
     QPushButton *m_stopButton;
     QLabel *m_programStatusLabel;
-
-    QSpinBox *m_turnNodeIdSpin;
-    QSpinBox *m_driveNodeIdSpin;
-    QDoubleSpinBox *m_turnScaleSpin;
-    QDoubleSpinBox *m_driveScaleSpin;
 
     QComboBox *m_controlModeCombo;
     QComboBox *m_inputModeCombo;
@@ -250,11 +315,8 @@ private:
     QString m_lastRxMessage;
     quint32 m_lastTxFrameId;
     quint8 m_lastTxNodeId;
+    int m_lastTxBoardIndex;
     bool m_waitingForTxResponse;
-
-    double m_turnZeroTurns;
-    double m_driveZeroTurns;
-    bool m_zeroPointInitialized;
     ScanState m_scanState;
 };
 
