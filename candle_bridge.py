@@ -3,8 +3,8 @@ import json
 import struct
 import sys
 import threading
-import time
 import re
+
 
 import libusb_package
 import usb.backend.libusb1
@@ -29,6 +29,29 @@ CAN_EFF_MASK = 0x1FFFFFFF
 CAN_SFF_MASK = 0x000007FF
 
 BACKEND = usb.backend.libusb1.get_backend(find_library=libusb_package.find_library)
+
+
+def enumerate_candle_devices():
+    return list(usb.core.find(idVendor=VID, idProduct=PID, backend=BACKEND, find_all=True) or [])
+
+
+def describe_device(dev, index):
+    return {
+        "index": index,
+        "bus": getattr(dev, "bus", None),
+        "address": getattr(dev, "address", None),
+        "port_number": getattr(dev, "port_number", None),
+        "vendor_id": f"0x{getattr(dev, 'idVendor', 0):04X}",
+        "product_id": f"0x{getattr(dev, 'idProduct', 0):04X}",
+    }
+
+
+def backend_error_message():
+    return (
+        "libusb backend is unavailable. Install/repair libusb dependencies first. "
+        "On Windows, if this is a candleLight/gs_usb adapter, make sure the device uses WinUSB/libusb."
+    )
+
 
 
 def emit(event, **kwargs):
@@ -56,13 +79,18 @@ class CandleDevice:
         self.in_ep = 0x81
 
     def open(self):
-        matches = list(usb.core.find(idVendor=VID, idProduct=PID, backend=BACKEND, find_all=True) or [])
+        if BACKEND is None:
+            raise RuntimeError(backend_error_message())
+
+        matches = enumerate_candle_devices()
         if not matches:
             raise RuntimeError(
                 "candleLight/gs_usb adapter VID 1D50 PID 606F not found. "
                 "If your USB-CAN module appears as a COM port, use AUTO/SLCAN instead. "
                 "If it is a candleLight adapter on Windows, make sure WinUSB/libusb is installed."
             )
+
+
 
         channel_index = 0
         match = re.search(r"(\d+)$", self.channel_name or "")
@@ -162,9 +190,22 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--channel", default="candle0")
     parser.add_argument("--bitrate", type=int, default=250000)
+    parser.add_argument("--list", action="store_true", help="List detected candleLight/gs_usb adapters and exit")
     args = parser.parse_args()
 
+    if args.list:
+        if BACKEND is None:
+            emit("error", message=backend_error_message())
+            return 2
+
+        devices = enumerate_candle_devices()
+        emit("list",
+             count=len(devices),
+             devices=[describe_device(dev, index) for index, dev in enumerate(devices)])
+        return 0
+
     candle = CandleDevice(args.channel, args.bitrate)
+
     try:
         candle.open()
     except Exception as exc:
