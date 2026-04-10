@@ -1,248 +1,11 @@
-        "Keys": [
-            "webgl"
-        ]
-    },
-    "archreq": 1,
-    "className": "QWebGLIntegrationPlugin",
-    "debug": true,
-    "version": 330752
-}
-
-
-[20:40:50.146] [DEBUG] Got keys from plugin meta data ("webgl")
-[20:40:50.159] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll"
-[20:40:50.172] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll, metadata=
-{
-    "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
-    "MetaData": {
-        "Keys": [
-            "windows"
-        ]
-    },
-    "archreq": 0,
-    "className": "QWindowsIntegrationPlugin",
-    "debug": false,
-    "version": 330752
-}
-
-
-[20:40:50.185] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
+[14:09:15.005] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Widgetsd.dll'" 
          not a plugin
-[20:40:50.201] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindowsd.dll"
-[20:40:50.214] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qwindowsd.dll, metadata=
-{
-    "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
-    "MetaData": {
-        "Keys": [
-            "windows"
-        ]
-    },
-    "archreq": 1,
-    "className": "QWindowsIntegrationPlugin",
-    "debug": true,
-    "version": 330752
-}
-
-
-[20:40:50.228] [DEBUG] Got keys from plugin meta data ("windows")
-[20:40:50.245] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug" ...
-[20:40:50.263] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/D3Dcompiler_47.dll"
-[20:40:50.292] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/D3Dcompiler_47.dll'" 
-         not a plugin
-[20:40:50.293] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/libEGLd.dll"
-[20:40:50.310] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/libEGLd.dll'" 
-         not a plugin
-[20:40:50.323] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/libGLESV2d.dll"
-[20:40:50.401] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/libGLESV2d.dll'" 
-         not a plugin
-[20:40:50.404] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/opengl32sw.dll"
-[20:40:50.484] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/opengl32sw.dll'" 
-         not a plugin
-[20:40:50.486] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Cored.dll"
-[20:40:50.547] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Cored.dll'" 
-         not a plugin
-[20:40:50.548] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Guid.dll"
-[20:40:50.610] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Guid.dll'" 
-         not a plugin
-[20:40:50.612] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Networkd.dll"
-[20:40:50.637] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Networkd.dll'" 
-         not a plugin
-[20:40:50.639] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5SerialBusd.dll"
-[20:40:50.655] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5SerialBusd.dll'" 
-         not a plugin
-[20:40:50.668] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5SerialPortd.dll"
-[20:40:50.683] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5SerialPortd.dll'" 
-         not a plugin
-[20:40:50.697] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Svgd.dll"
-[20:40:50.710] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Svgd.dll'" 
-         not a plugin
-[20:40:50.718] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Widgetsd.dll"
-[20:40:50.767] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Widgetsd.dll'" 
-         not a plugin
-[20:40:50.769] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/platforms" ...
-[20:40:50.781] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/platforms" ...
-[20:40:50.795] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/platforms/qwindowsd.dll"
-[20:40:50.808] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/platforms/qwindowsd.dll, metadata=
-{
-    "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
-    "MetaData": {
-        "Keys": [
-            "windows"
-        ]
-    },
-    "archreq": 1,
-    "className": "QWindowsIntegrationPlugin",
-    "debug": true,
-    "version": 330752
-}
-
-
-[20:40:50.824] [DEBUG] Got keys from plugin meta data ("windows")
-[20:40:50.836] [DEBUG] Cannot load library D:\qt\5.12.4\msvc2017\plugins\platforms\qwindowsd.dll: Unknown error 0x000000c1.
-[20:40:50.851] [WARN ] QLibraryPrivate::loadPlugin failed on "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindowsd.dll" : "Cannot load library D:\\qt\\5.12.4\\msvc2017\\plugins\\platforms\\qwindowsd.dll: Unknown error 0x000000c1."
-[20:40:50.866] [DEBUG] loaded library "D:/dev/odriveCar/debug/platforms/qwindowsd.dll"
-[20:40:50.881] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms" ...
-[20:40:50.890] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qdirect2d.dll"
-[20:40:50.902] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qdirect2d.dll, metadata=
-{
-    "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
-    "MetaData": {
-        "Keys": [
-            "direct2d"
-        ]
-    },
-    "archreq": 0,
-    "className": "QWindowsDirect2DIntegrationPlugin",
-    "debug": false,
-    "version": 330752
-}
-
-
-[20:40:50.915] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qdirect2d.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
-         not a plugin
-[20:40:50.925] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qdirect2dd.dll"
-[20:40:50.937] [DEBUG] Got keys from plugin meta data ()
-[20:40:50.949] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qminimal.dll"
-[20:40:50.961] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qminimal.dll, metadata=
-{
-    "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
-    "MetaData": {
-        "Keys": [
-            "minimal"
-        ]
-    },
-    "archreq": 0,
-    "className": "QMinimalIntegrationPlugin",
-    "debug": false,
-    "version": 330752
-}
-
-
-[20:40:50.977] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qminimal.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
-         not a plugin
-[20:40:50.989] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qminimald.dll"
-[20:40:51.004] [DEBUG] Got keys from plugin meta data ()
-[20:40:51.018] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qoffscreen.dll"
-[20:40:51.030] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qoffscreen.dll, metadata=
-{
-    "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
-    "MetaData": {
-        "Keys": [
-            "offscreen"
-        ]
-    },
-    "archreq": 0,
-    "className": "QOffscreenIntegrationPlugin",
-    "debug": false,
-    "version": 330752
-}
-
-
-[20:40:51.045] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qoffscreen.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
-         not a plugin
-[20:40:51.060] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qoffscreend.dll"
-[20:40:51.078] [DEBUG] Got keys from plugin meta data ()
-[20:40:51.092] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwebgl.dll"
-[20:40:51.108] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qwebgl.dll, metadata=
-{
-    "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
-    "MetaData": {
-        "Keys": [
-            "webgl"
-        ]
-    },
-    "archreq": 0,
-    "className": "QWebGLIntegrationPlugin",
-    "debug": false,
-    "version": 330752
-}
-
-
-[20:40:51.120] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qwebgl.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
-         not a plugin
-[20:40:51.131] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwebgld.dll"
-[20:40:51.145] [DEBUG] Got keys from plugin meta data ()
-[20:40:51.161] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll"
-[20:40:51.177] [WARN ] Found metadata in lib D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll, metadata=
-{
-    "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
-    "MetaData": {
-        "Keys": [
-            "windows"
-        ]
-    },
-    "archreq": 0,
-    "className": "QWindowsIntegrationPlugin",
-    "debug": false,
-    "version": 330752
-}
-
-
-[20:40:51.192] [DEBUG] "The plugin 'D:/qt/5.12.4/msvc2017/plugins/platforms/qwindows.dll' uses incompatible Qt library. (Cannot mix debug and release libraries.)" 
-         not a plugin
-[20:40:51.204] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/qt/5.12.4/msvc2017/plugins/platforms/qwindowsd.dll"
-[20:40:51.216] [DEBUG] "Cannot load library D:\\qt\\5.12.4\\msvc2017\\plugins\\platforms\\qwindowsd.dll: Unknown error 0x000000c1." 
-         not a plugin
-[20:40:51.226] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug" ...
-[20:40:51.239] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/D3Dcompiler_47.dll"
-[20:40:51.265] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/D3Dcompiler_47.dll'" 
-         not a plugin
-[20:40:51.267] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/libEGLd.dll"
-[20:40:51.281] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/libEGLd.dll'" 
-         not a plugin
-[20:40:51.294] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/libGLESV2d.dll"
-[20:40:51.373] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/libGLESV2d.dll'" 
-         not a plugin
-[20:40:51.375] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/opengl32sw.dll"
-[20:40:51.453] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/opengl32sw.dll'" 
-         not a plugin
-[20:40:51.455] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Cored.dll"
-[20:40:51.515] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Cored.dll'" 
-         not a plugin
-[20:40:51.517] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Guid.dll"
-[20:40:51.579] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Guid.dll'" 
-         not a plugin
-[20:40:51.581] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Networkd.dll"
-[20:40:51.602] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Networkd.dll'" 
-         not a plugin
-[20:40:51.605] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5SerialBusd.dll"
-[20:40:51.619] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5SerialBusd.dll'" 
-         not a plugin
-[20:40:51.629] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5SerialPortd.dll"
-[20:40:51.643] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5SerialPortd.dll'" 
-         not a plugin
-[20:40:51.655] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Svgd.dll"
-[20:40:51.671] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Svgd.dll'" 
-         not a plugin
-[20:40:51.683] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/Qt5Widgetsd.dll"
-[20:40:51.733] [DEBUG] "Failed to extract plugin meta data from 'D:/dev/odriveCar/debug/Qt5Widgetsd.dll'" 
-         not a plugin
-[20:40:51.736] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/platformthemes" ...
-[20:40:51.748] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/platformthemes" ...
-[20:40:51.768] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/styles" ...
-[20:40:51.784] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/styles" ...
-[20:40:51.798] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/styles/qwindowsvistastyled.dll"
-[20:40:51.813] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/styles/qwindowsvistastyled.dll, metadata=
+[14:09:15.007] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/platformthemes" ...
+[14:09:15.024] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/platformthemes" ...
+[14:09:15.044] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/styles" ...
+[14:09:15.059] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/styles" ...
+[14:09:15.076] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/styles/qwindowsvistastyled.dll"
+[14:09:15.095] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/styles/qwindowsvistastyled.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QStyleFactoryInterface",
     "MetaData": {
@@ -257,13 +20,13 @@
 }
 
 
-[20:40:51.827] [DEBUG] Got keys from plugin meta data ("windowsvista")
-[20:40:51.839] [DEBUG] loaded library "D:/dev/odriveCar/debug/styles/qwindowsvistastyled.dll"
-[20:40:51.854] [INFO ] Application dir: D:/dev/odriveCar/debug
-[20:40:51.865] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/canbus" ...
-[20:40:51.884] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/canbus" ...
-[20:40:51.905] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtpassthrucanbusd.dll"
-[20:40:51.924] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtpassthrucanbusd.dll, metadata=
+[14:09:15.113] [DEBUG] Got keys from plugin meta data ("windowsvista")
+[14:09:15.133] [DEBUG] loaded library "D:/dev/odriveCar/debug/styles/qwindowsvistastyled.dll"
+[14:09:15.154] [INFO ] Application dir: D:/dev/odriveCar/debug
+[14:09:15.172] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/canbus" ...
+[14:09:15.189] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/canbus" ...
+[14:09:15.209] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtpassthrucanbusd.dll"
+[14:09:15.230] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtpassthrucanbusd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QCanBusFactory",
     "MetaData": {
@@ -276,9 +39,9 @@
 }
 
 
-[20:40:51.937] [DEBUG] Got keys from plugin meta data ()
-[20:40:51.952] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtpeakcanbusd.dll"
-[20:40:51.969] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtpeakcanbusd.dll, metadata=
+[14:09:15.250] [DEBUG] Got keys from plugin meta data ()
+[14:09:15.269] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtpeakcanbusd.dll"
+[14:09:15.293] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtpeakcanbusd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QCanBusFactory",
     "MetaData": {
@@ -291,9 +54,9 @@
 }
 
 
-[20:40:51.985] [DEBUG] Got keys from plugin meta data ()
-[20:40:52.000] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtsysteccanbusd.dll"
-[20:40:52.015] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtsysteccanbusd.dll, metadata=
+[14:09:15.313] [DEBUG] Got keys from plugin meta data ()
+[14:09:15.333] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtsysteccanbusd.dll"
+[14:09:15.353] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtsysteccanbusd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QCanBusFactory",
     "MetaData": {
@@ -306,9 +69,9 @@
 }
 
 
-[20:40:52.030] [DEBUG] Got keys from plugin meta data ()
-[20:40:52.042] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qttinycanbusd.dll"
-[20:40:52.056] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qttinycanbusd.dll, metadata=
+[14:09:15.373] [DEBUG] Got keys from plugin meta data ()
+[14:09:15.394] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qttinycanbusd.dll"
+[14:09:15.412] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qttinycanbusd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QCanBusFactory",
     "MetaData": {
@@ -321,9 +84,9 @@
 }
 
 
-[20:40:52.067] [DEBUG] Got keys from plugin meta data ()
-[20:40:52.083] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtvectorcanbusd.dll"
-[20:40:52.096] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtvectorcanbusd.dll, metadata=
+[14:09:15.430] [DEBUG] Got keys from plugin meta data ()
+[14:09:15.452] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtvectorcanbusd.dll"
+[14:09:15.472] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtvectorcanbusd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QCanBusFactory",
     "MetaData": {
@@ -336,9 +99,9 @@
 }
 
 
-[20:40:52.109] [DEBUG] Got keys from plugin meta data ()
-[20:40:52.125] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtvirtualcanbusd.dll"
-[20:40:52.137] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtvirtualcanbusd.dll, metadata=
+[14:09:15.491] [DEBUG] Got keys from plugin meta data ()
+[14:09:15.513] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/canbus/qtvirtualcanbusd.dll"
+[14:09:15.534] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/canbus/qtvirtualcanbusd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QCanBusFactory",
     "MetaData": {
@@ -351,12 +114,12 @@
 }
 
 
-[20:40:52.148] [DEBUG] Got keys from plugin meta data ()
-[20:40:52.160] [INFO ] Qt CAN plugins: passthrucan, peakcan, systeccan, tinycan, vectorcan, virtualcan
-[20:40:52.172] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/iconengines" ...
-[20:40:52.181] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/iconengines" ...
-[20:40:52.193] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/iconengines/qsvgicond.dll"
-[20:40:52.208] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/iconengines/qsvgicond.dll, metadata=
+[14:09:15.553] [DEBUG] Got keys from plugin meta data ()
+[14:09:15.573] [INFO ] Qt CAN plugins: passthrucan, peakcan, systeccan, tinycan, vectorcan, virtualcan
+[14:09:15.594] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/iconengines" ...
+[14:09:15.612] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/iconengines" ...
+[14:09:15.633] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/iconengines/qsvgicond.dll"
+[14:09:15.651] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/iconengines/qsvgicond.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QIconEngineFactoryInterface",
     "MetaData": {
@@ -373,11 +136,11 @@
 }
 
 
-[20:40:52.221] [DEBUG] Got keys from plugin meta data ("svg", "svgz", "svg.gz")
-[20:40:52.466] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/imageformats" ...
-[20:40:52.467] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/imageformats" ...
-[20:40:52.481] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qgifd.dll"
-[20:40:52.495] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qgifd.dll, metadata=
+[14:09:15.669] [DEBUG] Got keys from plugin meta data ("svg", "svgz", "svg.gz")
+[14:09:15.915] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/imageformats" ...
+[14:09:15.917] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/imageformats" ...
+[14:09:15.934] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qgifd.dll"
+[14:09:15.955] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qgifd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -395,9 +158,9 @@
 }
 
 
-[20:40:52.510] [DEBUG] Got keys from plugin meta data ("gif")
-[20:40:52.525] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qicnsd.dll"
-[20:40:52.543] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qicnsd.dll, metadata=
+[14:09:15.974] [DEBUG] Got keys from plugin meta data ("gif")
+[14:09:15.986] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qicnsd.dll"
+[14:09:16.002] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qicnsd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -415,9 +178,9 @@
 }
 
 
-[20:40:52.559] [DEBUG] Got keys from plugin meta data ("icns")
-[20:40:52.577] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qicod.dll"
-[20:40:52.597] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qicod.dll, metadata=
+[14:09:16.018] [DEBUG] Got keys from plugin meta data ("icns")
+[14:09:16.033] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qicod.dll"
+[14:09:16.047] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qicod.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -437,9 +200,9 @@
 }
 
 
-[20:40:52.610] [DEBUG] Got keys from plugin meta data ("ico", "cur")
-[20:40:52.624] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qjpegd.dll"
-[20:40:52.640] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qjpegd.dll, metadata=
+[14:09:16.062] [DEBUG] Got keys from plugin meta data ("ico", "cur")
+[14:09:16.081] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qjpegd.dll"
+[14:09:16.103] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qjpegd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -459,9 +222,9 @@
 }
 
 
-[20:40:52.653] [DEBUG] Got keys from plugin meta data ("jpg", "jpeg")
-[20:40:52.669] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qsvgd.dll"
-[20:40:52.686] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qsvgd.dll, metadata=
+[14:09:16.121] [DEBUG] Got keys from plugin meta data ("jpg", "jpeg")
+[14:09:16.142] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qsvgd.dll"
+[14:09:16.164] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qsvgd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -481,9 +244,9 @@
 }
 
 
-[20:40:52.701] [DEBUG] Got keys from plugin meta data ("svg", "svgz")
-[20:40:52.715] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qtgad.dll"
-[20:40:52.730] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qtgad.dll, metadata=
+[14:09:16.184] [DEBUG] Got keys from plugin meta data ("svg", "svgz")
+[14:09:16.205] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qtgad.dll"
+[14:09:16.225] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qtgad.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -501,9 +264,9 @@
 }
 
 
-[20:40:52.744] [DEBUG] Got keys from plugin meta data ("tga")
-[20:40:52.760] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qtiffd.dll"
-[20:40:52.773] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qtiffd.dll, metadata=
+[14:09:16.243] [DEBUG] Got keys from plugin meta data ("tga")
+[14:09:16.262] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qtiffd.dll"
+[14:09:16.279] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qtiffd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -523,9 +286,9 @@
 }
 
 
-[20:40:52.787] [DEBUG] Got keys from plugin meta data ("tiff", "tif")
-[20:40:52.804] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qwbmpd.dll"
-[20:40:52.820] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qwbmpd.dll, metadata=
+[14:09:16.293] [DEBUG] Got keys from plugin meta data ("tiff", "tif")
+[14:09:16.309] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qwbmpd.dll"
+[14:09:16.327] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qwbmpd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -543,9 +306,9 @@
 }
 
 
-[20:40:52.837] [DEBUG] Got keys from plugin meta data ("wbmp")
-[20:40:52.857] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qwebpd.dll"
-[20:40:52.871] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qwebpd.dll, metadata=
+[14:09:16.344] [DEBUG] Got keys from plugin meta data ("wbmp")
+[14:09:16.359] [DEBUG] QFactoryLoader::QFactoryLoader() looking at "D:/dev/odriveCar/debug/imageformats/qwebpd.dll"
+[14:09:16.369] [WARN ] Found metadata in lib D:/dev/odriveCar/debug/imageformats/qwebpd.dll, metadata=
 {
     "IID": "org.qt-project.Qt.QImageIOHandlerFactoryInterface",
     "MetaData": {
@@ -563,38 +326,275 @@
 }
 
 
-[20:40:52.887] [DEBUG] Got keys from plugin meta data ("webp")
-[20:40:52.902] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qgifd.dll"
-[20:40:52.915] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qicnsd.dll"
-[20:40:52.928] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qicod.dll"
-[20:40:52.941] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qjpegd.dll"
-[20:40:52.957] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qsvgd.dll"
-[20:40:52.968] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qtgad.dll"
-[20:40:52.981] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qtiffd.dll"
-[20:40:52.992] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qwbmpd.dll"
-[20:40:53.001] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qwebpd.dll"
-[20:40:53.533] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/accessible" ...
-[20:40:53.534] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/accessible" ...
-[20:40:53.549] [DEBUG] Cannot load library usbcan64: ÕÒ²»µ½Ö¸¶¨µÄÄ£¿é¡£
-[20:40:53.563] [INFO ] Refreshing CAN interfaces. plugin= candle  configuredBoards= 1
-[20:40:53.580] [INFO ] Refresh result. plugin= candle  interfaces= candle0  error= 
-[20:40:53.696] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/accessiblebridge" ...
-[20:40:53.699] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/accessiblebridge" ...
-[20:40:59.226] [INFO ] Connect requested. board= 0  plugin= candle  interface= candle0  bitrate= 250000  defaultNode= 16
-[20:40:59.395] [INFO ] [20:40:59] [°å1 candle0] candle bridge script: D:/dev/odriveCar/debug/../candle_bridge.py
-[20:40:59.397] [INFO ] [20:40:59] [°å1 candle0] CAN Á´Â·ÒÑ¾ÍÐ÷
-[20:40:59.405] [INFO ] [20:40:59] [°å1 candle0] candle ready: candle0
-[20:40:59.413] [INFO ] [20:40:59] [°å1 candle0] ODrive heartbeat detected from node 16
-[20:40:59.420] [INFO ] [20:40:59] [°å1 candle0] ODrive heartbeat detected from node 1
-[20:40:59.796] [INFO ] [20:40:59] [°å1 candle0] ÕýÔÚÉ¨Ãè½Úµã...
-[20:40:59.798] [INFO ] [20:40:59] [°å1 candle0] Probing CAN nodes 0..63 for ODrive replies.
-[20:41:01.305] [INFO ] [20:41:01] ÒÑÖ÷¶¯Ë¢ÐÂ×´Ì¬
-[20:41:01.307] [INFO ] [20:41:01] [{.X?»»µ½ Node 1
-[20:41:01.325] [INFO ] [20:41:01] [°å1 candle0] ¼ì²âµ½½Úµã: 1, 16
-[20:41:07.859] [INFO ] [20:41:07] ÒÑÖ÷¶¯Ë¢ÐÂ×´Ì¬
-[20:41:07.861] [INFO ] [20:41:07] [{.X?»»µ½ Node 16
-[20:41:11.882] [INFO ] [20:41:11] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=03 00 00 00 01 00 00 00
-[20:41:11.884] [INFO ] [20:41:11] [°å1 candle0] CANDLE TX Set_Input_Pos id=0X20C dlc=8 payload=00 00 20 C1 00 00 00 00
-[20:41:16.039] [INFO ] [20:41:15] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=01 00 00 00 01 00 00 00
-[20:41:16.042] [INFO ] [20:41:15] [°å1 candle0] CANDLE TX Set_Input_Torque id=0X20E dlc=4 payload=CD CC 4C 3E
-[20:41:20.164] [INFO ] [20:41:20] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=01 00 00 00
+[14:09:16.384] [DEBUG] Got keys from plugin meta data ("webp")
+[14:09:16.399] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qgifd.dll"
+[14:09:16.414] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qicnsd.dll"
+[14:09:16.430] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qicod.dll"
+[14:09:16.445] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qjpegd.dll"
+[14:09:16.463] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qsvgd.dll"
+[14:09:16.479] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qtgad.dll"
+[14:09:16.496] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qtiffd.dll"
+[14:09:16.511] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qwbmpd.dll"
+[14:09:16.532] [DEBUG] loaded library "D:/dev/odriveCar/debug/imageformats/qwebpd.dll"
+[14:09:16.978] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/accessible" ...
+[14:09:16.980] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/accessible" ...
+[14:09:16.999] [DEBUG] Cannot load library usbcan64: ÕÒ²»µ½Ö¸¶¨µÄÄ£¿é¡£
+[14:09:17.020] [INFO ] Refreshing CAN interfaces. plugin= candle  configuredBoards= 1
+[14:09:17.033] [INFO ] Refresh result. plugin= candle  interfaces= candle0  error= 
+[14:09:17.154] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/qt/5.12.4/msvc2017/plugins/platforms/accessiblebridge" ...
+[14:09:17.156] [DEBUG] QFactoryLoader::QFactoryLoader() checking directory path "D:/dev/odriveCar/debug/accessiblebridge" ...
+[14:09:18.396] [INFO ] Connect requested. board= 0  plugin= candle  interface= candle0  bitrate= 250000  defaultNode= 16
+[14:09:18.566] [INFO ] [14:09:18] [°å1 candle0] candle bridge script: D:/dev/odriveCar/debug/../candle_bridge.py
+[14:09:18.567] [INFO ] [14:09:18] [°å1 candle0] CAN Á´Â·ÒÑ¾ÍÐ÷
+[14:09:18.578] [INFO ] [14:09:18] [°å1 candle0] candle ready: candle0
+[14:09:18.586] [INFO ] [14:09:18] [°å1 candle0] ODrive heartbeat detected from node 16
+[14:09:18.597] [INFO ] [14:09:18] [°å1 candle0] ODrive heartbeat detected from node 1
+[14:09:18.955] [INFO ] [14:09:18] [°å1 candle0] ÕýÔÚÉ¨Ãè½Úµã...
+[14:09:18.958] [INFO ] [14:09:18] [°å1 candle0] Probing CAN nodes 0..63 for ODrive replies.
+[14:09:20.346] [INFO ] [14:09:20] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:20.347] [INFO ] [14:09:20] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:20.358] [INFO ] [14:09:20] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:20.366] [INFO ] [14:09:20] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 BF 00 00 00 00
+[14:09:20.503] [INFO ] [14:09:20] ÒÑÖ÷¶¯Ë¢ÐÂ×´Ì¬
+[14:09:20.507] [INFO ] [14:09:20] [{.X?»»µ½ Node 1
+[14:09:20.519] [INFO ] [14:09:20] [°å1 candle0] ¼ì²âµ½½Úµã: 1, 16
+[14:09:20.761] [INFO ] [14:09:20] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:20.763] [INFO ] [14:09:20] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:20.772] [INFO ] [14:09:20] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:20.781] [INFO ] [14:09:20] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:21.903] [INFO ] [14:09:21] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:21.905] [INFO ] [14:09:21] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:21.913] [INFO ] [14:09:21] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:21.923] [INFO ] [14:09:21] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 BF 00 00 00 00
+[14:09:21.932] [INFO ] [14:09:21] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:21.939] [INFO ] [14:09:21] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:21.946] [INFO ] [14:09:21] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:21.955] [INFO ] [14:09:21] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:22.304] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:22.309] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:22.319] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:22.327] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 BF 00 00 00 00
+[14:09:22.444] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:22.446] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:22.454] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:22.462] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:22.575] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:22.577] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:22.585] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:22.592] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 BF 00 00 00 00
+[14:09:22.600] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:22.607] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:22.614] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:22.621] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:22.773] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:22.778] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:22.788] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:22.796] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 BF 00 00 00 00
+[14:09:22.804] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:22.812] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:22.819] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:22.826] [INFO ] [14:09:22] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:23.924] [INFO ] [14:09:23] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:23.930] [INFO ] [14:09:23] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=00 00 00 40 00 00 00 40
+[14:09:23.941] [INFO ] [14:09:23] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:23.949] [INFO ] [14:09:23] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 40 00 00 00 00
+[14:09:24.406] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:24.409] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=CD CC CC 3D 00 00 00 40
+[14:09:24.417] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:24.425] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:24.642] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:24.646] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=00 00 00 40 00 00 00 40
+[14:09:24.655] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:24.662] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 40 00 00 00 00
+[14:09:24.672] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:24.680] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=CD CC CC 3D 00 00 00 40
+[14:09:24.689] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:24.696] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:24.837] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:24.840] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=00 00 00 40 00 00 00 40
+[14:09:24.852] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:24.861] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 40 00 00 00 00
+[14:09:24.868] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:24.875] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=CD CC CC 3D 00 00 00 40
+[14:09:24.882] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:24.890] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:25.001] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:25.003] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=00 00 00 40 00 00 00 40
+[14:09:25.012] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:25.020] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 40 00 00 00 00
+[14:09:25.028] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:25.036] [INFO ] [14:09:24] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=CD CC CC 3D 00 00 00 40
+[14:09:25.042] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:25.050] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:25.203] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:25.206] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=00 00 00 40 00 00 00 40
+[14:09:25.214] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:25.222] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 40 00 00 00 00
+[14:09:25.231] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:25.239] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=CD CC CC 3D 00 00 00 40
+[14:09:25.247] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:25.256] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:25.909] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:25.911] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:25.921] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:25.929] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 3F 00 00 00 00
+[14:09:25.936] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:25.942] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:25.951] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:25.962] [INFO ] [14:09:25] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:26.098] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:26.100] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:26.109] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:26.118] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 3F 00 00 00 00
+[14:09:26.126] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:26.134] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:26.143] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:26.151] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:26.303] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:26.307] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:26.315] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:26.324] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 3F 00 00 00 00
+[14:09:26.426] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:26.429] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:26.437] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:26.445] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:26.554] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:26.556] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:26.564] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:26.573] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 3F 00 00 00 00
+[14:09:26.580] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:26.587] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:26.595] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:26.604] [INFO ] [14:09:26] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:27.346] [INFO ] [14:09:27] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:27.348] [INFO ] [14:09:27] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=00 00 00 40 00 00 00 40
+[14:09:27.359] [INFO ] [14:09:27] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:27.367] [INFO ] [14:09:27] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 C0 00 00 00 00
+[14:09:27.737] [INFO ] [14:09:27] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:27.741] [INFO ] [14:09:27] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=CD CC CC 3D 00 00 00 40
+[14:09:27.751] [INFO ] [14:09:27] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:27.759] [INFO ] [14:09:27] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:28.221] [INFO ] [14:09:28] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:28.225] [INFO ] [14:09:28] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:29.408] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:29.411] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:29.420] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:29.427] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 BF 00 00 00 00
+[14:09:29.548] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:29.552] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:29.563] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:29.571] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:29.763] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:29.766] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:29.775] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:29.782] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 BF 00 00 00 00
+[14:09:29.791] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:29.798] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:29.806] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:29.814] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:29.983] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:29.986] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:29.997] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:30.007] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 BF 00 00 00 00
+[14:09:30.014] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:30.023] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:30.031] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:30.038] [INFO ] [14:09:29] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:30.208] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:30.210] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:30.218] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:30.228] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 BF 00 00 00 00
+[14:09:30.236] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:30.243] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:30.250] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:30.258] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:30.407] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:30.409] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:30.417] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:30.426] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 BF 00 00 00 00
+[14:09:30.590] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:30.594] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:30.603] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:30.612] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:31.027] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:31.031] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=00 00 00 40 00 00 00 40
+[14:09:31.041] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:31.048] [INFO ] [14:09:30] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 40 00 00 00 00
+[14:09:31.164] [INFO ] [14:09:31] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:31.168] [INFO ] [14:09:31] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=CD CC CC 3D 00 00 00 40
+[14:09:31.177] [INFO ] [14:09:31] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:31.185] [INFO ] [14:09:31] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:31.590] [INFO ] [14:09:31] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:31.592] [INFO ] [14:09:31] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:31.600] [INFO ] [14:09:31] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:31.609] [INFO ] [14:09:31] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 3F 00 00 00 00
+[14:09:32.331] [INFO ] [14:09:32] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:32.333] [INFO ] [14:09:32] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:32.343] [INFO ] [14:09:32] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:32.351] [INFO ] [14:09:32] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:35.083] [INFO ] [14:09:34] ÒÑÖ÷¶¯Ë¢ÐÂ×´Ì¬
+[14:09:35.085] [INFO ] [14:09:34] [{.X?»»µ½ Node 16
+[14:09:37.418] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:37.420] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:37.429] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:37.438] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 BF 00 00 00 00
+[14:09:37.681] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:37.685] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:37.701] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:37.707] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:37.836] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:37.839] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:37.849] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:37.857] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 BF 00 00 00 00
+[14:09:37.964] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:37.966] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:37.974] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:37.981] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:37.989] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:37.998] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:38.005] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:38.014] [INFO ] [14:09:37] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 BF 00 00 00 00
+[14:09:38.116] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:38.120] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:38.131] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:38.138] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:38.650] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:38.653] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=00 00 00 40 00 00 00 40
+[14:09:38.662] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:38.670] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 40 00 00 00 00
+[14:09:38.678] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:38.685] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=CD CC CC 3D 00 00 00 40
+[14:09:38.692] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:38.700] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:38.804] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:38.806] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=00 00 00 40 00 00 00 40
+[14:09:38.815] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:38.825] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 40 00 00 00 00
+[14:09:38.834] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:38.842] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=CD CC CC 3D 00 00 00 40
+[14:09:38.850] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:38.859] [INFO ] [14:09:38] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:39.274] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:39.279] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=00 00 80 3F 00 00 00 40
+[14:09:39.292] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:39.301] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 80 3F 00 00 00 00
+[14:09:39.308] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Axis_State id=0X207 dlc=4 payload=08 00 00 00
+[14:09:39.315] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Limits id=0X20F dlc=8 payload=CD CC 4C 3D 00 00 00 40
+[14:09:39.323] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X20B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:39.333] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X20D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:39.852] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:39.857] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=00 00 00 40 00 00 00 40
+[14:09:39.867] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:39.875] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 C0 00 00 00 00
+[14:09:39.885] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:39.892] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=CD CC CC 3D 00 00 00 40
+[14:09:39.900] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:39.908] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 00 00 00 00 00
+[14:09:40.026] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:40.029] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=00 00 00 40 00 00 00 40
+[14:09:40.039] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:40.047] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 C0 00 00 00 00
+[14:09:40.055] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Axis_State id=0X027 dlc=4 payload=08 00 00 00
+[14:09:40.064] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Limits id=0X02F dlc=8 payload=CD CC CC 3D 00 00 00 40
+[14:09:40.071] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Controller_Mode id=0X02B dlc=8 payload=02 00 00 00 01 00 00 00
+[14:09:40.078] [INFO ] [14:09:39] [°å1 candle0] CANDLE TX Set_Input_Vel id=0X02D dlc=8 payload=00 00 00 00 00 00 00 00
