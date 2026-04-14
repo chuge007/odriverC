@@ -434,13 +434,15 @@ void MainWindow::updateConnectionState(bool connected)
     if (m_rescanNodesButton) {
         m_rescanNodesButton->setEnabled(connected);
     }
-    for (BoardConfigRow &row : m_boardConfigRows) {
-        if (row.interfaceCombo) row.interfaceCombo->setEnabled(!connected && row.rowWidget && row.rowWidget->isVisible());
-        if (row.scanNodesButton) row.scanNodesButton->setEnabled(row.rowWidget && row.rowWidget->isVisible());
-        if (row.turnNodeCombo) row.turnNodeCombo->setEnabled(!connected && row.rowWidget && row.rowWidget->isVisible());
-        if (row.driveNodeCombo) row.driveNodeCombo->setEnabled(!connected && row.rowWidget && row.rowWidget->isVisible());
-        if (row.turnScaleSpin) row.turnScaleSpin->setEnabled(!connected && row.rowWidget && row.rowWidget->isVisible());
-        if (row.driveScaleSpin) row.driveScaleSpin->setEnabled(!connected && row.rowWidget && row.rowWidget->isVisible());
+    for (int i = 0; i < m_boardConfigRows.size(); ++i) {
+        BoardConfigRow &row = m_boardConfigRows[i];
+        const bool visible = i < connectedInterfaceCount();
+        if (row.interfaceCombo) row.interfaceCombo->setEnabled(!connected && visible);
+        if (row.scanNodesButton) row.scanNodesButton->setEnabled(visible);
+        if (row.turnNodeCombo) row.turnNodeCombo->setEnabled(!connected && visible);
+        if (row.driveNodeCombo) row.driveNodeCombo->setEnabled(!connected && visible);
+        if (row.turnScaleSpin) row.turnScaleSpin->setEnabled(!connected && visible);
+        if (row.driveScaleSpin) row.driveScaleSpin->setEnabled(!connected && visible);
     }
     setMotionControlsEnabled(connected);
 
@@ -1008,23 +1010,36 @@ void MainWindow::syncAxisReadouts()
 {
     const QList<int> boardIndices = connectedBoardIndices();
     if (boardIndices.isEmpty()) {
-        m_turnPositionLabel->setText(QStringLiteral("-- mm"));
-        m_drivePositionLabel->setText(QStringLiteral("-- mm"));
+        m_frontLeftPositionLabel->setText(QStringLiteral("-- mm"));
+        m_frontRightPositionLabel->setText(QStringLiteral("-- mm"));
+        m_rearLeftPositionLabel->setText(QStringLiteral("-- mm"));
+        m_rearRightPositionLabel->setText(QStringLiteral("-- mm"));
         return;
     }
 
-    QStringList turnLines;
-    QStringList driveLines;
+    // 四轮映射：板子0转轮=前左，板子0驱轮=前右，板子1转轮=后左，板子1驱轮=后右
+    QString frontLeft = QStringLiteral("-- mm");
+    QString frontRight = QStringLiteral("-- mm");
+    QString rearLeft = QStringLiteral("-- mm");
+    QString rearRight = QStringLiteral("-- mm");
+    
     for (const int boardIndex : boardIndices) {
-        turnLines << QStringLiteral("%1 %2 mm")
-                        .arg(boardDisplayName(boardIndex),
-                             QString::number(axisPositionMm(boardIndex, boardTurnNodeId(boardIndex), true), 'f', 2));
-        driveLines << QStringLiteral("%1 %2 mm")
-                         .arg(boardDisplayName(boardIndex),
-                              QString::number(axisPositionMm(boardIndex, boardDriveNodeId(boardIndex), false), 'f', 2));
+        const double turnPos = axisPositionMm(boardIndex, boardTurnNodeId(boardIndex), true);
+        const double drivePos = axisPositionMm(boardIndex, boardDriveNodeId(boardIndex), false);
+        
+        if (boardIndex == 0) {
+            frontLeft = QStringLiteral("%1 mm").arg(QString::number(turnPos, 'f', 2));
+            frontRight = QStringLiteral("%1 mm").arg(QString::number(drivePos, 'f', 2));
+        } else if (boardIndex == 1) {
+            rearLeft = QStringLiteral("%1 mm").arg(QString::number(turnPos, 'f', 2));
+            rearRight = QStringLiteral("%1 mm").arg(QString::number(drivePos, 'f', 2));
+        }
     }
-    m_turnPositionLabel->setText(turnLines.join(QStringLiteral("\n")));
-    m_drivePositionLabel->setText(driveLines.join(QStringLiteral("\n")));
+    
+    m_frontLeftPositionLabel->setText(frontLeft);
+    m_frontRightPositionLabel->setText(frontRight);
+    m_rearLeftPositionLabel->setText(rearLeft);
+    m_rearRightPositionLabel->setText(rearRight);
 }
 
 void MainWindow::setZeroPoint()
@@ -1291,12 +1306,18 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
     leftLayout->setHorizontalSpacing(12);
     leftLayout->setVerticalSpacing(18);
 
-    QLabel *turnLabel = new QLabel(zh("e8bdace8bdae3a"), leftPanel);
-    QLabel *driveLabel = new QLabel(zh("e9a9b1e8bdae3a"), leftPanel);
-    turnLabel->setStyleSheet(QStringLiteral("font-size: 20px;"));
-    driveLabel->setStyleSheet(QStringLiteral("font-size: 20px;"));
-    m_turnPositionLabel = createReadoutLabel();
-    m_drivePositionLabel = createReadoutLabel();
+    QLabel *frontLeftLabel = new QLabel(zh("e5898de8bdaee5b7a63a"), leftPanel);
+    QLabel *frontRightLabel = new QLabel(zh("e5898de8bdaee58fb33a"), leftPanel);
+    QLabel *rearLeftLabel = new QLabel(zh("e5908ee8bdaee5b7a63a"), leftPanel);
+    QLabel *rearRightLabel = new QLabel(zh("e5908ee8bdaee58fb33a"), leftPanel);
+    frontLeftLabel->setStyleSheet(QStringLiteral("font-size: 20px;"));
+    frontRightLabel->setStyleSheet(QStringLiteral("font-size: 20px;"));
+    rearLeftLabel->setStyleSheet(QStringLiteral("font-size: 20px;"));
+    rearRightLabel->setStyleSheet(QStringLiteral("font-size: 20px;"));
+    m_frontLeftPositionLabel = createReadoutLabel();
+    m_frontRightPositionLabel = createReadoutLabel();
+    m_rearLeftPositionLabel = createReadoutLabel();
+    m_rearRightPositionLabel = createReadoutLabel();
     m_setZeroButton = new QPushButton(zh("e8aebee7bdaee99bb6e782b9"), leftPanel);
     m_homeSpeedSpin = new QDoubleSpinBox(leftPanel);
     m_homeSpeedSpin->setDecimals(2);
@@ -1311,18 +1332,24 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
     m_jogSpeedSpin->setSuffix(QStringLiteral(" mm/s"));
     m_jogSpeedSpin->setStyleSheet(QStringLiteral("font-size: 18px;"));
 
-    leftLayout->addWidget(turnLabel, 0, 0);
-    leftLayout->addWidget(m_turnPositionLabel, 0, 1);
+    leftLayout->addWidget(frontLeftLabel, 0, 0);
+    leftLayout->addWidget(m_frontLeftPositionLabel, 0, 1);
     leftLayout->addWidget(new QLabel(QStringLiteral("mm"), leftPanel), 0, 2);
-    leftLayout->addWidget(driveLabel, 1, 0);
-    leftLayout->addWidget(m_drivePositionLabel, 1, 1);
+    leftLayout->addWidget(frontRightLabel, 1, 0);
+    leftLayout->addWidget(m_frontRightPositionLabel, 1, 1);
     leftLayout->addWidget(new QLabel(QStringLiteral("mm"), leftPanel), 1, 2);
-    leftLayout->addWidget(m_setZeroButton, 2, 0, 1, 2);
-    leftLayout->addWidget(new QLabel(zh("e59b9ee58e9fe782b9e9809fe5baa63a")), 3, 0);
-    leftLayout->addWidget(m_homeSpeedSpin, 3, 1, 1, 2);
-    leftLayout->addWidget(new QLabel(zh("e782b9e58aa8e9809fe5baa63a")), 4, 0);
-    leftLayout->addWidget(m_jogSpeedSpin, 4, 1, 1, 2);
-    leftLayout->setRowStretch(5, 1);
+    leftLayout->addWidget(rearLeftLabel, 2, 0);
+    leftLayout->addWidget(m_rearLeftPositionLabel, 2, 1);
+    leftLayout->addWidget(new QLabel(QStringLiteral("mm"), leftPanel), 2, 2);
+    leftLayout->addWidget(rearRightLabel, 3, 0);
+    leftLayout->addWidget(m_rearRightPositionLabel, 3, 1);
+    leftLayout->addWidget(new QLabel(QStringLiteral("mm"), leftPanel), 3, 2);
+    leftLayout->addWidget(m_setZeroButton, 4, 0, 1, 2);
+    leftLayout->addWidget(new QLabel(zh("e59b9ee58e9fe782b9e9809fe5baa63a")), 5, 0);
+    leftLayout->addWidget(m_homeSpeedSpin, 5, 1, 1, 2);
+    leftLayout->addWidget(new QLabel(zh("e782b9e58aa8e9809fe5baa63a")), 6, 0);
+    leftLayout->addWidget(m_jogSpeedSpin, 6, 1, 1, 2);
+    leftLayout->setRowStretch(7, 1);
 
     QFrame *centerPanel = new QFrame(ui->centralWidget);
     centerPanel->setFrameShape(QFrame::StyledPanel);
@@ -1488,13 +1515,32 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
                 updateProgramStatus(zh("e6898be58aa8e782b9e58aa8e5b7b2e4b8ade6ada2e887aae58aa8e689abe68f8f"));
             }
 
+            // 同步控制：收集所有命令，然后同时发送
+            int successCount = 0;
+            int failCount = 0;
+            QStringList statusList;
+            
             for (const int boardIndex : boardIndices) {
                 const quint8 nodeId = turnAxis ? boardTurnNodeId(boardIndex) : boardDriveNodeId(boardIndex);
-                commandAxisVelocity(boardIndex,
+                bool success = commandAxisVelocity(boardIndex,
                                     nodeId,
                                     direction * qMax(0.1, m_jogSpeedSpin->value()),
                                     turnAxis);
+                if (success) {
+                    successCount++;
+                    statusList << QString("%1:OK").arg(boardDisplayName(boardIndex));
+                } else {
+                    failCount++;
+                    statusList << QString("%1:FAIL").arg(boardDisplayName(boardIndex));
+                }
             }
+            
+            // 显示同步状态
+            QString syncStatus = QString(zh("e5908ce6ada5") + " %1/%2 " + zh("e68890e58a9f")).arg(successCount).arg(boardIndices.size());
+            if (failCount > 0) {
+                syncStatus += QString(" [%1" + zh("e5a4b1e8b4a5") + "]").arg(failCount);
+            }
+            updateProgramStatus(syncStatus + " - " + statusList.join(" "));
         });
 
         connect(button, &QPushButton::released, this, [this, turnAxis]() {
@@ -1503,11 +1549,15 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
                 return;
             }
 
+            // 同步停止所有轮子
+            int stopCount = 0;
             for (const int boardIndex : boardIndices) {
                 const quint8 nodeId = turnAxis ? boardTurnNodeId(boardIndex) : boardDriveNodeId(boardIndex);
-                commandAxisVelocity(boardIndex, nodeId, 0.0, turnAxis);
+                if (commandAxisVelocity(boardIndex, nodeId, 0.0, turnAxis)) {
+                    stopCount++;
+                }
             }
-            updateProgramStatus(zh("e782b9e58aa8e5819ce6ada2"));
+            updateProgramStatus(QString(zh("e5819ce6ada2") + " %1/%2").arg(stopCount).arg(boardIndices.size()));
         });
     };
 
@@ -1818,15 +1868,19 @@ void MainWindow::buildBoardConfigRows(QGridLayout *layout, QWidget *parent)
     layout->addWidget(new QLabel(zh("e69dbfe5ad90")), 1, 0);
     layout->addWidget(new QLabel(zh("e68ea5e58fa3")), 1, 1);
     layout->addWidget(new QLabel(zh("e88a82e782b9e689abe68f8f")), 1, 2);
-    layout->addWidget(new QLabel(zh("e8bdace8bdb4e88a82e782b9")), 1, 3);
-    layout->addWidget(new QLabel(zh("e9a9b1e8bdb4e88a82e782b9")), 1, 4);
-    layout->addWidget(new QLabel(zh("e8bdace8bdb4e68da2e7ae97")), 1, 5);
-    layout->addWidget(new QLabel(zh("e9a9b1e8bdb4e68da2e7ae97")), 1, 6);
+    layout->addWidget(new QLabel(zh("e5b7a6e8bdaee88a82e782b9")), 1, 3);
+    layout->addWidget(new QLabel(zh("e58fb3e8bdaee88a82e782b9")), 1, 4);
+    layout->addWidget(new QLabel(zh("e5b7a6e8bdaee68da2e7ae97")), 1, 5);
+    layout->addWidget(new QLabel(zh("e58fb3e8bdaee68da2e7ae97")), 1, 6);
     layout->addWidget(new QLabel(zh("e78ab6e68081")), 1, 7);
 
+    // 板子名称映射：板子0=前轮，板子1=后轮
+    const QStringList boardNames = {zh("e5898de8bdae"), zh("e5908ee8bdae"), zh("e69dbf33"), zh("e69dbf34")};
+    
     for (int boardIndex = 0; boardIndex < maxBoards; ++boardIndex) {
         BoardConfigRow &row = m_boardConfigRows[boardIndex];
-        row.label = new QLabel(zh("e69dbf2531").arg(boardIndex + 1), parent);
+        const QString boardName = boardIndex < boardNames.size() ? boardNames[boardIndex] : zh("e69dbf2531").arg(boardIndex + 1);
+        row.label = new QLabel(boardName, parent);
         row.interfaceCombo = new QComboBox(parent);
         row.interfaceCombo->setMinimumWidth(150);
         row.scanNodesButton = new QPushButton(zh("e689abe68f8f"), parent);
@@ -2497,6 +2551,14 @@ void MainWindow::updateBoardNodeCombos(int boardIndex)
 
     updateCombo(row.turnNodeCombo, row.detectedNodes, row.preferredTurnNodeId);
     updateCombo(row.driveNodeCombo, row.detectedNodes, row.preferredDriveNodeId);
+    
+    // 启用节点选择下拉框
+    if (row.turnNodeCombo) {
+        row.turnNodeCombo->setEnabled(true);
+    }
+    if (row.driveNodeCombo) {
+        row.driveNodeCombo->setEnabled(true);
+    }
 }
 
 void MainWindow::updateAllBoardNodeCombos()
@@ -2522,13 +2584,59 @@ void MainWindow::updateBoardStatusLabel(int boardIndex, const QString &statusTex
         return;
     }
 
+    // 如果已连接，显示详细状态
     if (boardIndex < m_boardRuntimes.size() && m_boardRuntimes[boardIndex].connected) {
-        row.statusLabel->setText(zh("e5b7b2e8bf9ee68ea5"));
+        ODriveMotorController *ctrl = m_boardRuntimes[boardIndex].controller;
+        if (ctrl) {
+            quint8 turnNode = boardTurnNodeId(boardIndex);
+            quint8 driveNode = boardDriveNodeId(boardIndex);
+            const QDateTime now = QDateTime::currentDateTime();
+            const auto hasFreshHeartbeat = [&now](const ODriveMotorController::AxisStatus &status) {
+                if (!status.lastHeartbeat.isValid()) {
+                    return false;
+                }
+
+                qint64 ageMs = status.lastHeartbeat.msecsTo(now);
+                if (ageMs < 0) {
+                    ageMs = 0;
+                }
+                return ageMs <= 1500;
+            };
+            
+            // 获取转轴和驱轴的状态
+            QString turnStatus = QStringLiteral("--");
+            QString driveStatus = QStringLiteral("--");
+            
+            // 转轴状态
+            const ODriveMotorController::AxisStatus &turnAxisStatus = ctrl->status(turnNode);
+            if (hasFreshHeartbeat(turnAxisStatus)) {
+                turnStatus = QString("T:S%1 V%2")
+                                 .arg(turnAxisStatus.axisState)
+                                 .arg(turnAxisStatus.velocityTurnsPerSecond, 0, 'f', 1);
+            }
+            
+            // 驱轴状态
+            const ODriveMotorController::AxisStatus &driveAxisStatus = ctrl->status(driveNode);
+            if (driveNode != turnNode && hasFreshHeartbeat(driveAxisStatus)) {
+                driveStatus = QString(" D:S%1 V%2")
+                                  .arg(driveAxisStatus.axisState)
+                                  .arg(driveAxisStatus.velocityTurnsPerSecond, 0, 'f', 1);
+            }
+            
+            row.statusLabel->setText(turnStatus + driveStatus);
+        } else {
+            row.statusLabel->setText(zh("e5b7b2e8bf9ee68ea5"));
+        }
         return;
     }
 
     if (!row.detectedNodes.isEmpty()) {
-        row.statusLabel->setText(zh("e88a82e782b93a202531").arg(row.detectedNodes.size()));
+        QString nodeList;
+        for (int i = 0; i < row.detectedNodes.size() && i < 4; ++i) {
+            if (i > 0) nodeList += QStringLiteral(",");
+            nodeList += QString::number(row.detectedNodes[i]);
+        }
+        row.statusLabel->setText(zh("e88a82e782b93a20") + nodeList);
         return;
     }
 
@@ -3138,14 +3246,21 @@ bool MainWindow::commandAxisVelocity(int boardIndex, quint8 nodeId, double speed
         return false;
     }
 
+    // 确保电机在闭环状态
     ensureAxisClosedLoop(boardIndex, nodeId);
-    const double velocityLimitMmPerSecond = qMax(qAbs(speedMmPerSecond), 0.1);
+    
+    // 设置速度限制 - 使用更大的限制值以确保电机能够达到目标速度
+    const double velocityLimitMmPerSecond = qMax(qAbs(speedMmPerSecond) * 1.5, 10.0);
     controller->setLimits(nodeId,
                           static_cast<float>(mmPerSecondToTurnsPerSecond(boardIndex, velocityLimitMmPerSecond, turnAxis)),
                           static_cast<float>(currentLimitAmps()));
+    
+    // 设置控制模式为速度控制，输入模式为Passthrough
     controller->setControllerMode(nodeId,
                                   ODriveMotorController::VelocityControl,
                                   ODriveMotorController::Passthrough);
+    
+    // 发送速度命令
     return controller->setVelocity(nodeId,
                                    static_cast<float>(mmPerSecondToTurnsPerSecond(boardIndex, speedMmPerSecond, turnAxis)),
                                    0.0f);

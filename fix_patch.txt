@@ -1,0 +1,54 @@
+修复说明：
+
+问题1：闪退 - QWidget::mapTo() 错误
+原因：在 buildMainInterface() 中创建轮子状态标签时，没有正确设置父对象
+位置：mainwindow.cpp 第2890-2910行左右
+
+修复方法：
+在 syncAxisReadouts() 函数开始处添加空指针检查：
+```cpp
+void MainWindow::syncAxisReadouts()
+{
+    // 添加安全检查
+    if (m_wheelPositionLabels.isEmpty() || m_wheelVelocityLabels.isEmpty() || m_wheelStatusLabels.isEmpty()) {
+        return;
+    }
+    
+    const QList<int> boardIndices = connectedBoardIndices();
+    // ... 其余代码
+}
+```
+
+问题2：电机不动
+原因：代码尝试同时控制多个节点，但实际只有一个接口
+位置：mainwindow.cpp 第3450行左右的 connectJogButton lambda
+
+当前错误代码：
+```cpp
+// 获取所有配置的车轮节点ID
+QList<quint8> nodeIds;
+for (int i = 0; i < qMin(4, m_boardConfigRows.size()); ++i) {
+    const quint8 nodeId = turnAxis ? boardTurnNodeId(i) : boardDriveNodeId(i);
+    if (!nodeIds.contains(nodeId)) {
+        nodeIds.append(nodeId);
+    }
+}
+// 同时向所有节点发送速度命令
+for (const quint8 nodeId : nodeIds) {
+    commandAxisVelocity(boardIndex, nodeId, ...);
+}
+```
+
+修复为：
+```cpp
+// 只控制当前板子的对应节点
+const quint8 nodeId = turnAxis ? boardTurnNodeId(boardIndex) : boardDriveNodeId(boardIndex);
+commandAxisVelocity(boardIndex, nodeId, direction * qMax(0.1, m_jogSpeedSpin->value()), turnAxis);
+```
+
+问题3：轮子状态显示初始化
+位置：buildMainInterface() 函数中
+
+当前代码创建了固定4个标签，但应该根据实际配置数量创建。
+
+建议：暂时简化为只显示当前连接的板子的驱动轮和转向轮状态，不要尝试显示4个独立车轮。

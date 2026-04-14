@@ -76,7 +76,6 @@ private slots:
 private:
     struct BoardConfigRow
     {
-        QWidget *rowWidget = nullptr;
         QLabel *label = nullptr;
         QComboBox *interfaceCombo = nullptr;
         QPushButton *scanNodesButton = nullptr;
@@ -222,8 +221,10 @@ private:
     QPushButton *m_rescanNodesButton;
     QLabel *m_activeNodesLabel;
     QDoubleSpinBox *m_debugScaleSpin;
-    QLabel *m_turnPositionLabel;
-    QLabel *m_drivePositionLabel;
+    QLabel *m_frontLeftPositionLabel;
+    QLabel *m_frontRightPositionLabel;
+    QLabel *m_rearLeftPositionLabel;
+    QLabel *m_rearRightPositionLabel;
     QPushButton *m_setZeroButton;
     QDoubleSpinBox *m_homeSpeedSpin;
     QDoubleSpinBox *m_jogSpeedSpin;

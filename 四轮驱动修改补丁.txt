@@ -1,0 +1,97 @@
+# 四轮驱动修改补丁说明
+
+## 关键问题诊断
+
+### 1. 闭环后移动问题的根本原因
+从日志分析，问题在于按钮的pressed/released事件处理：
+- pressed时发送速度命令
+- released时立即发送0速度停止命令
+- 如果按得很快，电机刚启动就被停止
+
+**解决方案**：
+- 不要在按钮事件中直接控制，而是使用状态机
+- 持续按住时保持速度命令
+- 松开时才停止
+
+### 2. 高级界面节点选择灰色问题
+原因：updateBoardNodeCombos函数填充节点后没有启用combo
+
+**解决方案**：
+在updateBoardNodeCombos中添加：
+```cpp
+combo->setEnabled(true);
+```
+
+### 3. 四轮驱动架构问题
+当前是2轮架构（turn + drive），需要改为4轮
+
+**最小改动方案**：
+- 保持现有的"板"概念
+- 将turnNode改为frontLeftNode, frontRightNode
+- 将driveNode改为rearLeftNode, rearRightNode
+- 每个板管理4个轮子
+
+## 需要修改的函数列表
+
+### mainwindow.cpp 关键修改点：
+
+1. **buildBoardConfigRows** (行约2800)
+   - 修改UI布局，添加4个轮子的列
+   - 修改标签：前左轮、前右轮、后左轮、后右轮
+
+2. **updateBoardNodeCombos** (行约3100)
+   - 添加启用combo的代码
+   - 更新为4个combo
+
+3. **boardTurnNodeId/boardDriveNodeId** (行约3400)
+   - 改为boardFrontLeftNodeId等4个函数
+
+4. **boardScale** (行约3450)
+   - 参数从bool turnAxis改为int wheelIndex (0-3)
+
+5. **commandAxisVelocity** (行约4200)
+   - 参数从bool turnAxis改为int wheelIndex
+
+6. **手动控制按钮事件** (行约2600 buildMainInterface)
+   - 修改为状态保持模式，不要立即停止
+
+7. **loadSettings/saveSettings** (行约3600)
+   - 更新配置键名，支持4个轮子
+
+8. **syncAxisReadouts** (行约1800)
+   - 显示4个轮子的位置
+
+9. **enableAxes** (行约1900)
+   - 对4个轮子都执行闭环
+
+10. **新增函数**：
+    - commandAllWheelsVelocity - 同步控制4轮
+    - commandDifferentialTurn - 差速转向
+
+## 实施步骤
+
+由于文件太大，建议分步骤修改：
+
+### 步骤1：修复闭环移动问题（最紧急）
+修改buildMainInterface中的按钮连接逻辑
+
+### 步骤2：启用节点选择
+修改updateBoardNodeCombos添加setEnabled(true)
+
+### 步骤3：扩展为4轮架构
+- 修改数据结构（已完成）
+- 修改UI构建
+- 修改辅助函数
+- 修改运动控制逻辑
+
+### 步骤4：添加同步控制
+- 实现批量命令发送
+- 添加同步状态显示
+
+## 测试计划
+
+1. 测试闭环后能否持续移动
+2. 测试节点选择是否可用
+3. 测试4个轮子配置
+4. 测试同步前进/后退
+5. 测试差速转向
