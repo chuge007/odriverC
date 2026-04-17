@@ -1,4 +1,4 @@
-﻿#include "mainwindow.h"
+#include "mainwindow.h"
 #include "ui_mainwindow.h"
 
 #include "odrivemotorcontroller.h"
@@ -11,16 +11,21 @@
 #include <QDialog>
 #include <QDoubleSpinBox>
 #include <QDir>
+#include <QFileInfo>
 #include <QFrame>
 #include <QGuiApplication>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLibrary>
 #include <QLineEdit>
+#include <QMap>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QProcess>
 #include <QPushButton>
 #include <QCheckBox>
 #include <QRegularExpression>
@@ -35,6 +40,10 @@
 #include <QWidget>
 #include <QtGlobal>
 #include <algorithm>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -222,6 +231,130 @@ QString describeDisarmReason(quint32 value)
     return QStringLiteral("0x%1 (see ODrive disarm reason)")
             .arg(value, 8, 16, QLatin1Char('0'))
             .toUpper();
+}
+
+QString describeMotorError(quint32 value)
+{
+    return decodeBitfield(value, {
+                              qMakePair<quint32, const char *>(0x00000001u, "PHASE_RESISTANCE_OUT_OF_RANGE"),
+                              qMakePair<quint32, const char *>(0x00000002u, "PHASE_INDUCTANCE_OUT_OF_RANGE"),
+                              qMakePair<quint32, const char *>(0x00000008u, "DRV_FAULT"),
+                              qMakePair<quint32, const char *>(0x00000010u, "CONTROL_DEADLINE_MISSED"),
+                              qMakePair<quint32, const char *>(0x00000080u, "MODULATION_MAGNITUDE"),
+                              qMakePair<quint32, const char *>(0x00000100u, "CURRENT_SENSE_SATURATION"),
+                              qMakePair<quint32, const char *>(0x00000400u, "CURRENT_LIMIT_VIOLATION"),
+                              qMakePair<quint32, const char *>(0x00001000u, "MODULATION_IS_NAN"),
+                              qMakePair<quint32, const char *>(0x00004000u, "MOTOR_THERMISTOR_OVER_TEMP"),
+                              qMakePair<quint32, const char *>(0x00010000u, "FET_THERMISTOR_OVER_TEMP"),
+                              qMakePair<quint32, const char *>(0x00020000u, "TIMER_UPDATE_MISSED"),
+                              qMakePair<quint32, const char *>(0x00040000u, "CURRENT_MEASUREMENT_UNAVAILABLE"),
+                              qMakePair<quint32, const char *>(0x00080000u, "CONTROLLER_FAILED"),
+                              qMakePair<quint32, const char *>(0x00100000u, "I_BUS_OUT_OF_RANGE"),
+                              qMakePair<quint32, const char *>(0x00200000u, "BRAKE_RESISTOR_DISARMED"),
+                              qMakePair<quint32, const char *>(0x00400000u, "SYSTEM_LEVEL"),
+                              qMakePair<quint32, const char *>(0x00800000u, "BAD_TIMING"),
+                              qMakePair<quint32, const char *>(0x01000000u, "UNKNOWN_PHASE_ESTIMATE"),
+                              qMakePair<quint32, const char *>(0x02000000u, "UNKNOWN_PHASE_VEL")
+                          });
+}
+
+QString describeEncoderError(quint32 value)
+{
+    return decodeBitfield(value, {
+                              qMakePair<quint32, const char *>(0x00000001u, "UNSTABLE_GAIN"),
+                              qMakePair<quint32, const char *>(0x00000002u, "CPR_POLEPAIRS_MISMATCH"),
+                              qMakePair<quint32, const char *>(0x00000004u, "NO_RESPONSE"),
+                              qMakePair<quint32, const char *>(0x00000008u, "UNSUPPORTED_ENCODER_MODE"),
+                              qMakePair<quint32, const char *>(0x00000010u, "ILLEGAL_HALL_STATE"),
+                              qMakePair<quint32, const char *>(0x00000020u, "INDEX_NOT_FOUND_YET"),
+                              qMakePair<quint32, const char *>(0x00000040u, "ABS_SPI_TIMEOUT"),
+                              qMakePair<quint32, const char *>(0x00000080u, "ABS_SPI_COM_FAIL"),
+                              qMakePair<quint32, const char *>(0x00000100u, "ABS_SPI_NOT_READY"),
+                              qMakePair<quint32, const char *>(0x00000200u, "HALL_NOT_CALIBRATED_YET")
+                          });
+}
+
+QString describeControllerError(quint32 value)
+{
+    return decodeBitfield(value, {
+                              qMakePair<quint32, const char *>(0x00000001u, "OVERSPEED"),
+                              qMakePair<quint32, const char *>(0x00000002u, "INVALID_INPUT_MODE"),
+                              qMakePair<quint32, const char *>(0x00000004u, "UNSTABLE_GAIN"),
+                              qMakePair<quint32, const char *>(0x00000008u, "INVALID_MIRROR_AXIS"),
+                              qMakePair<quint32, const char *>(0x00000010u, "INVALID_LOAD_ENCODER"),
+                              qMakePair<quint32, const char *>(0x00000020u, "INVALID_ESTIMATE"),
+                              qMakePair<quint32, const char *>(0x00000040u, "INVALID_CIRCULAR_RANGE"),
+                              qMakePair<quint32, const char *>(0x00000080u, "SPINOUT_DETECTED")
+                          });
+}
+
+QString describeSensorlessError(quint32 value)
+{
+    return decodeBitfield(value, {
+                              qMakePair<quint32, const char *>(0x00000001u, "UNSTABLE_GAIN"),
+                              qMakePair<quint32, const char *>(0x00000002u, "UNKNOWN_CURRENT_MEASUREMENT"),
+                              qMakePair<quint32, const char *>(0x00000004u, "UNKNOWN_CURRENT_COMMAND")
+                          });
+}
+
+QString describeControlModeName(quint8 mode)
+{
+    switch (mode) {
+    case ODriveMotorController::VoltageControl:
+        return QStringLiteral("VoltageControl");
+    case ODriveMotorController::TorqueControl:
+        return QStringLiteral("TorqueControl");
+    case ODriveMotorController::VelocityControl:
+        return QStringLiteral("VelocityControl");
+    case ODriveMotorController::PositionControl:
+        return QStringLiteral("PositionControl");
+    default:
+        return QStringLiteral("Unknown(%1)").arg(mode);
+    }
+}
+
+QString describeInputModeName(quint8 mode)
+{
+    switch (mode) {
+    case ODriveMotorController::Inactive:
+        return QStringLiteral("Inactive");
+    case ODriveMotorController::Passthrough:
+        return QStringLiteral("Passthrough");
+    case ODriveMotorController::VelRamp:
+        return QStringLiteral("VelRamp");
+    case ODriveMotorController::PosFilter:
+        return QStringLiteral("PosFilter");
+    case ODriveMotorController::MixChannels:
+        return QStringLiteral("MixChannels");
+    case ODriveMotorController::TrapTraj:
+        return QStringLiteral("TrapTraj");
+    case ODriveMotorController::TorqueRamp:
+        return QStringLiteral("TorqueRamp");
+    case ODriveMotorController::Mirror:
+        return QStringLiteral("Mirror");
+    case ODriveMotorController::Tuning:
+        return QStringLiteral("Tuning");
+    default:
+        return QStringLiteral("Unknown(%1)").arg(mode);
+    }
+}
+
+void writeConsoleLine(const QString &line)
+{
+#ifdef Q_OS_WIN
+    HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (handle != INVALID_HANDLE_VALUE && handle != nullptr) {
+        DWORD mode = 0;
+        if (GetConsoleMode(handle, &mode)) {
+            const std::wstring wide = line.toStdWString();
+            DWORD written = 0;
+            WriteConsoleW(handle, wide.c_str(), static_cast<DWORD>(wide.size()), &written, nullptr);
+            WriteConsoleW(handle, L"\r\n", 2, &written, nullptr);
+            return;
+        }
+    }
+#endif
+    qInfo().noquote() << line;
 }
 
 } // namespace
@@ -612,7 +745,7 @@ void MainWindow::flushQueuedMessages()
     m_pendingLogLines.clear();
     m_logEdit->appendPlainText(lines.join(QStringLiteral("\n")));
     for (const QString &line : lines) {
-        qInfo().noquote() << line;
+        writeConsoleLine(line);
     }
 }
 
@@ -985,6 +1118,137 @@ void MainWindow::applyLimits()
                               static_cast<float>(m_velocityLimitSpin->value()),
                               static_cast<float>(m_currentLimitSpin->value()));
     }
+}
+
+void MainWindow::readPidParams()
+{
+    ODriveMotorController *controller = currentDebugController();
+    if (!controller || !controller->isConnected()) {
+        appendLog(zh("e8afbbe58f96504944e58f82e695b0e5a4b1e8b4a5efbc9ae69caae8bf9ee68ea5"));
+        return;
+    }
+
+    const quint8 nodeId = currentDebugNodeId();
+    
+    // 使用Python辅助工具读取PID参数
+    appendLog(zh("e6ada3e59ca8e8afbbe58f96504944e58f82e695b02e2e2e"));
+    
+    QProcess *process = new QProcess(this);
+    process->setProgram(QStringLiteral("python"));
+    process->setArguments({QStringLiteral("qt_pid_helper.py"), QStringLiteral("read"), QString::number(nodeId)});
+    
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+        process->deleteLater();
+        
+        if (exitCode != 0 || exitStatus != QProcess::NormalExit) {
+            appendLog(zh("e8afbbe58f96504944e5a4b1e8b4a5efbc9ae8bf9be7a88be5bc82e5b8b8"));
+            return;
+        }
+        
+        const QByteArray output = process->readAllStandardOutput();
+        QJsonDocument doc = QJsonDocument::fromJson(output);
+        if (!doc.isObject()) {
+            appendLog(zh("e8afbbe58f96504944e5a4b1e8b4a5efbc9ae8be93e587bae6a0bce5bc8fe99499e8afaf"));
+            return;
+        }
+        
+        QJsonObject obj = doc.object();
+        if (!obj.value(QStringLiteral("success")).toBool()) {
+            const QString error = obj.value(QStringLiteral("error")).toString();
+            appendLog(QStringLiteral("PID %1: %2").arg(zh("e8afbbe58f96e5a4b1e8b4a5"), error));
+            return;
+        }
+        
+        const double posGain = obj.value(QStringLiteral("pos_gain")).toDouble();
+        const double velGain = obj.value(QStringLiteral("vel_gain")).toDouble();
+        const double velIntGain = obj.value(QStringLiteral("vel_integrator_gain")).toDouble();
+        
+        m_posGainSpin->setValue(posGain);
+        m_velGainSpin->setValue(velGain);
+        m_velIntegratorGainSpin->setValue(velIntGain);
+        
+        appendLog(QStringLiteral("PID %1: pos_gain=%2, vel_gain=%3, vel_integrator_gain=%4")
+                  .arg(zh("e8afbbe58f96e68890e58a9f"))
+                  .arg(QString::number(posGain, 'f', 3))
+                  .arg(QString::number(velGain, 'f', 6))
+                  .arg(QString::number(velIntGain, 'f', 6)));
+    });
+    
+    process->start();
+}
+
+void MainWindow::applyPidParams()
+{
+    ODriveMotorController *controller = currentDebugController();
+    if (!controller || !controller->isConnected()) {
+        appendLog(zh("e5ba94e794a8504944e58f82e695b0e5a4b1e8b4a5efbc9ae69caae8bf9ee68ea5"));
+        return;
+    }
+
+    const quint8 nodeId = currentDebugNodeId();
+    const double posGain = m_posGainSpin->value();
+    const double velGain = m_velGainSpin->value();
+    const double velIntegratorGain = m_velIntegratorGainSpin->value();
+    
+    // 使用Python辅助工具设置PID参数
+    appendLog(QStringLiteral("PID %1: pos_gain=%2, vel_gain=%3, vel_integrator_gain=%4")
+              .arg(zh("e6ada3e59ca8e5ba94e794a8"))
+              .arg(QString::number(posGain, 'f', 3))
+              .arg(QString::number(velGain, 'f', 6))
+              .arg(QString::number(velIntegratorGain, 'f', 6)));
+    
+    QProcess *process = new QProcess(this);
+    process->setProgram(QStringLiteral("python"));
+    // 使用固定格式，避免科学计数法
+    QString posGainStr = QString::number(posGain, 'f', 6).remove(QRegularExpression("0+$")).remove(QRegularExpression("\\.$"));
+    QString velGainStr = QString::number(velGain, 'f', 6).remove(QRegularExpression("0+$")).remove(QRegularExpression("\\.$"));
+    QString velIntGainStr = QString::number(velIntegratorGain, 'f', 6).remove(QRegularExpression("0+$")).remove(QRegularExpression("\\.$"));
+    
+    process->setArguments({
+        QStringLiteral("qt_pid_helper.py"),
+        QStringLiteral("set"),
+        QString::number(nodeId),
+        posGainStr,
+        velGainStr,
+        velIntGainStr
+    });
+    
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+        process->deleteLater();
+        
+        if (exitCode != 0 || exitStatus != QProcess::NormalExit) {
+            appendLog(zh("e5ba94e794a8504944e5a4b1e8b4a5efbc9ae8bf9be7a88be5bc82e5b8b8"));
+            return;
+        }
+        
+        const QByteArray output = process->readAllStandardOutput();
+        QJsonDocument doc = QJsonDocument::fromJson(output);
+        if (!doc.isObject()) {
+            appendLog(zh("e5ba94e794a8504944e5a4b1e8b4a5efbc9ae8be93e587bae6a0bce5bc8fe99499e8afaf"));
+            return;
+        }
+        
+        QJsonObject obj = doc.object();
+        if (!obj.value(QStringLiteral("success")).toBool()) {
+            const QString error = obj.value(QStringLiteral("error")).toString();
+            appendLog(QStringLiteral("PID %1: %2").arg(zh("e5ba94e794a8e5a4b1e8b4a5"), error));
+            return;
+        }
+        
+        const double actualPos = obj.value(QStringLiteral("pos_gain")).toDouble();
+        const double actualVel = obj.value(QStringLiteral("vel_gain")).toDouble();
+        const double actualInt = obj.value(QStringLiteral("vel_integrator_gain")).toDouble();
+        
+        appendLog(QStringLiteral("PID %1: pos_gain=%2, vel_gain=%3, vel_integrator_gain=%4")
+                  .arg(zh("e5ba94e794a8e68890e58a9f"))
+                  .arg(QString::number(actualPos, 'f', 3))
+                  .arg(QString::number(actualVel, 'f', 6))
+                  .arg(QString::number(actualInt, 'f', 6)));
+    });
+    
+    process->start();
 }
 
 void MainWindow::refreshTelemetry()
@@ -1959,6 +2223,8 @@ void MainWindow::buildAdvancedContent(QVBoxLayout *mainLayout, QWidget *parent)
     m_estopButton = new QPushButton(zh("e680a5e5819c"), axisStateGroup);
     m_clearErrorsButton = new QPushButton(zh("e6b885e999a4e99499e8afaf"), axisStateGroup);
     m_refreshStatusButton = new QPushButton(zh("e588b7e696b0e78ab6e68081"), axisStateGroup);
+    m_diagnoseFixButton = new QPushButton(zh("e8af8ae696ade4bfaee5a48d"), axisStateGroup);
+    m_initializeMachineButton = new QPushButton(zh("e695b4e69cbae58897e5a78b"), axisStateGroup);
 
     axisStateLayout->addWidget(m_idleButton);
     axisStateLayout->addWidget(m_motorCalibrationButton);
@@ -1967,6 +2233,8 @@ void MainWindow::buildAdvancedContent(QVBoxLayout *mainLayout, QWidget *parent)
     axisStateLayout->addWidget(m_estopButton);
     axisStateLayout->addWidget(m_clearErrorsButton);
     axisStateLayout->addWidget(m_refreshStatusButton);
+    axisStateLayout->addWidget(m_diagnoseFixButton);
+    axisStateLayout->addWidget(m_initializeMachineButton);
 
     QHBoxLayout *middleLayout = new QHBoxLayout;
     middleLayout->setSpacing(12);
@@ -2060,11 +2328,41 @@ void MainWindow::buildAdvancedContent(QVBoxLayout *mainLayout, QWidget *parent)
     limitLayout->addWidget(m_currentLimitSpin, 1, 1);
     limitLayout->addWidget(m_applyLimitsButton, 0, 2, 2, 1);
 
+    QGroupBox *pidGroup = new QGroupBox(zh("504944e58f82e695b0e9858de7bdae"), parent);
+    QGridLayout *pidLayout = new QGridLayout(pidGroup);
+    m_posGainSpin = new QDoubleSpinBox(pidGroup);
+    m_posGainSpin->setRange(1.0, 5.0);
+    m_posGainSpin->setDecimals(3);
+    m_posGainSpin->setValue(1.0);
+    m_posGainSpin->setSingleStep(0.1);
+    m_velGainSpin = new QDoubleSpinBox(pidGroup);
+    m_velGainSpin->setRange(0.02, 0.1);
+    m_velGainSpin->setDecimals(6);
+    m_velGainSpin->setValue(0.02);
+    m_velGainSpin->setSingleStep(0.001);
+    m_velIntegratorGainSpin = new QDoubleSpinBox(pidGroup);
+    m_velIntegratorGainSpin->setRange(0.0, 1.0);
+    m_velIntegratorGainSpin->setDecimals(6);
+    m_velIntegratorGainSpin->setValue(0.0);
+    m_velIntegratorGainSpin->setSingleStep(0.001);
+    m_readPidButton = new QPushButton(zh("e8afbbe58f96"), pidGroup);
+    m_applyPidButton = new QPushButton(zh("e5ba94e794a8"), pidGroup);
+
+    pidLayout->addWidget(new QLabel(zh("e4bd8de7bdaee5a29ee79b8a20283120207e203529")), 0, 0);
+    pidLayout->addWidget(m_posGainSpin, 0, 1);
+    pidLayout->addWidget(m_readPidButton, 0, 2);
+    pidLayout->addWidget(new QLabel(zh("e9809fe5baa6e5a29ee79b8a2028302e30322020207e2020302e3129")), 1, 0);
+    pidLayout->addWidget(m_velGainSpin, 1, 1);
+    pidLayout->addWidget(m_applyPidButton, 1, 2);
+    pidLayout->addWidget(new QLabel(zh("e9809fe5baa6e7a7afe58886e5a29ee79b8a20283029")), 2, 0);
+    pidLayout->addWidget(m_velIntegratorGainSpin, 2, 1);
+
     leftColumn->addWidget(modeGroup);
     leftColumn->addWidget(positionGroup);
     leftColumn->addWidget(velocityGroup);
     leftColumn->addWidget(torqueGroup);
     leftColumn->addWidget(limitGroup);
+    leftColumn->addWidget(pidGroup);
     leftColumn->addStretch(1);
 
     QGroupBox *statusGroup = new QGroupBox(zh("e78ab6e68081e79b91e68ea7"), parent);
@@ -2154,6 +2452,10 @@ void MainWindow::buildAdvancedContent(QVBoxLayout *mainLayout, QWidget *parent)
             this, &MainWindow::sendTorqueCommand);
     connect(m_applyLimitsButton, &QPushButton::clicked,
             this, &MainWindow::applyLimits);
+    connect(m_readPidButton, &QPushButton::clicked,
+            this, &MainWindow::readPidParams);
+    connect(m_applyPidButton, &QPushButton::clicked,
+            this, &MainWindow::applyPidParams);
     connect(m_refreshStatusButton, &QPushButton::clicked,
             this, &MainWindow::refreshTelemetry);
     connect(m_estopButton, &QPushButton::clicked, this, [this]() {
@@ -2165,6 +2467,459 @@ void MainWindow::buildAdvancedContent(QVBoxLayout *mainLayout, QWidget *parent)
         if (ODriveMotorController *controller = currentDebugController()) {
             controller->clearErrors(currentDebugNodeId(), false);
         }
+    });
+    connect(m_diagnoseFixButton, &QPushButton::clicked,
+            this, &MainWindow::runDiagnoseFix);
+    connect(m_initializeMachineButton, &QPushButton::clicked,
+            this, &MainWindow::initializeMachine);
+}
+
+void MainWindow::runDiagnoseFix()
+{
+    ODriveMotorController *controller = currentDebugController();
+    if (!controller || !controller->isConnected()) {
+        appendLog(zh("e8af8ae696ade4bfaee5a48de5a4b1e8b4a5efbc9ae69caae8bf9ee68ea5"));
+        qInfo() << "Diagnose failed: not connected";
+        return;
+    }
+
+    const int boardIndex = currentDebugBoardIndex();
+    const quint8 nodeId = currentDebugNodeId();
+    controller->requestAllTelemetry(nodeId, false);
+
+    QTimer::singleShot(250, this, [this, controller, boardIndex, nodeId]() {
+        const ODriveMotorController::AxisStatus &status = controller->status(nodeId);
+
+        auto hex32 = [](quint32 value) {
+            return QStringLiteral("0x%1").arg(value, 8, 16, QLatin1Char('0')).toUpper();
+        };
+
+        const QString severeTag = zh("e38090e4b8a5e9878de38091");
+        const QString warningTag = zh("e38090e8ada6e5918ae38091");
+        const QString okTag = zh("e38090e6ada3e5b8b8e38091");
+
+        auto severityPrefix = [&](const QString &line) -> QString {
+            if (line.startsWith(severeTag)) {
+                return QStringLiteral("critical");
+            }
+            if (line.startsWith(warningTag)) {
+                return QStringLiteral("warning");
+            }
+            return QStringLiteral("info");
+        };
+
+        QStringList report;
+        QStringList findings;
+        QStringList recommendations;
+        int criticalCount = 0;
+        int warningCount = 0;
+
+        auto addFinding = [&](const QString &line) {
+            findings << line;
+            const QString severity = severityPrefix(line);
+            if (severity == QStringLiteral("critical")) {
+                ++criticalCount;
+            } else if (severity == QStringLiteral("warning")) {
+                ++warningCount;
+            }
+        };
+
+        auto addRecommendation = [&](const QString &line) {
+            if (!recommendations.contains(line)) {
+                recommendations << line;
+            }
+        };
+
+        report << QStringLiteral("========== %1 ==========").arg(zh("e8af8ae696ade68aa5e5918a"));
+        report << QStringLiteral("%1: %2").arg(zh("e69dbfe5ad90"), boardDisplayName(boardIndex));
+        report << QStringLiteral("%1: %2").arg(zh("e68ea5e58fa3"), boardInterfaceName(boardIndex));
+        report << QStringLiteral("%1: %2").arg(zh("e88a82e782b9"), nodeId);
+        report << QStringLiteral("%1: %2")
+                     .arg(zh("e697b6e997b4"),
+                          QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz")));
+        report << QString();
+
+        report << QStringLiteral("[1] %1").arg(zh("e59fbae7a180e78ab6e68081"));
+        report << QStringLiteral("Axis State: %1 (%2)")
+                     .arg(ODriveMotorController::axisStateName(status.axisState))
+                     .arg(status.axisState);
+        report << QStringLiteral("Procedure Result: %1 (%2)")
+                     .arg(ODriveMotorController::procedureResultName(status.procedureResult))
+                     .arg(status.procedureResult);
+        report << QStringLiteral("Trajectory Done: %1")
+                     .arg(status.trajectoryDone ? QStringLiteral("true") : QStringLiteral("false"));
+        report << QStringLiteral("Last Heartbeat: %1")
+                     .arg(status.lastHeartbeat.isValid()
+                              ? status.lastHeartbeat.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz"))
+                              : QStringLiteral("--"));
+        report << QStringLiteral("Last Message: %1")
+                     .arg(status.lastMessage.isValid()
+                              ? status.lastMessage.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz"))
+                              : QStringLiteral("--"));
+        report << QString();
+
+        report << QStringLiteral("[2] %1").arg(zh("e99499e8afafe4b88ee4bf9de68aa4"));
+        report << QStringLiteral("%1: %2 -> %3").arg(zh("e8bdb4e99499e8afaf"), hex32(status.axisError), describeAxisError(status.axisError));
+        report << QStringLiteral("%1: %2 -> %3").arg(zh("4f4472697665e7b3bbe7bb9fe99499e8afaf"), hex32(status.activeErrors), describeOdriveError(status.activeErrors));
+        report << QStringLiteral("%1: %2 -> %3").arg(QStringLiteral("Disarm Reason"), hex32(status.disarmReason), describeDisarmReason(status.disarmReason));
+        report << QStringLiteral("%1: %2 -> %3").arg(zh("e794b5e69cbae99499e8afaf"), hex32(status.motorError), describeMotorError(status.motorError));
+        report << QStringLiteral("%1: %2 -> %3").arg(zh("e7bc96e7a081e599a8e99499e8afaf"), hex32(status.encoderError), describeEncoderError(status.encoderError));
+        report << QStringLiteral("%1: %2 -> %3").arg(zh("e68ea7e588b6e599a8e99499e8afaf"), hex32(status.controllerError), describeControllerError(status.controllerError));
+        report << QStringLiteral("%1: %2 -> %3").arg(zh("e697a0e6849fe4bcb0e7ae97e599a8e99499e8afaf"), hex32(status.sensorlessError), describeSensorlessError(status.sensorlessError));
+        report << QString();
+
+        report << QStringLiteral("[3] %1").arg(zh("e5ae9ee697b6e58f8de9a688"));
+        report << QStringLiteral("Position: %1 turns / %2 mm")
+                     .arg(QString::number(status.positionTurns, 'f', 4),
+                          QString::number(turnsToMm(status.positionTurns, nodeId == boardTurnNodeId(boardIndex)), 'f', 3));
+        report << QStringLiteral("Velocity: %1 turns/s").arg(QString::number(status.velocityTurnsPerSecond, 'f', 4));
+        report << QStringLiteral("Iq Setpoint: %1 A").arg(QString::number(status.iqSetpointAmps, 'f', 4));
+        report << QStringLiteral("Iq Measured: %1 A").arg(QString::number(status.iqMeasuredAmps, 'f', 4));
+        report << QStringLiteral("Bus Voltage: %1 V").arg(QString::number(status.busVoltageVolts, 'f', 4));
+        report << QStringLiteral("Bus Current: %1 A").arg(QString::number(status.busCurrentAmps, 'f', 4));
+        report << QStringLiteral("Torque Target: %1 Nm").arg(QString::number(status.torqueTargetNm, 'f', 4));
+        report << QStringLiteral("Torque Estimate: %1 Nm").arg(QString::number(status.torqueEstimateNm, 'f', 4));
+        report << QStringLiteral("Electrical Power: %1 W").arg(QString::number(status.electricalPowerWatts, 'f', 3));
+        report << QStringLiteral("Mechanical Power: %1 W").arg(QString::number(status.mechanicalPowerWatts, 'f', 3));
+        report << QStringLiteral("FET Temperature: %1 C").arg(QString::number(status.fetTemperatureCelsius, 'f', 3));
+        report << QStringLiteral("Motor Temperature: %1 C").arg(QString::number(status.motorTemperatureCelsius, 'f', 3));
+        report << QString();
+
+        report << QStringLiteral("[4] %1").arg(zh("e7bc96e7a081e599a82fe4bcb0e7ae97e599a8"));
+        report << QStringLiteral("Encoder Shadow Count: %1").arg(status.encoderShadowCount);
+        report << QStringLiteral("Encoder Count In CPR: %1").arg(status.encoderCountInCPR);
+        report << QStringLiteral("Sensorless Pos Estimate: %1").arg(QString::number(status.sensorlessPosEstimate, 'f', 4));
+        report << QStringLiteral("Sensorless Vel Estimate: %1").arg(QString::number(status.sensorlessVelEstimate, 'f', 4));
+        report << QString();
+
+        report << QStringLiteral("[5] %1").arg(zh("e5bd93e5898de68ea7e588b6e9858de7bdae"));
+        report << QStringLiteral("Control Mode: %1 (%2)")
+                     .arg(describeControlModeName(status.currentControlMode))
+                     .arg(status.currentControlMode);
+        report << QStringLiteral("Input Mode: %1 (%2)")
+                     .arg(describeInputModeName(status.currentInputMode))
+                     .arg(status.currentInputMode);
+        report << QStringLiteral("Velocity Limit: %1 turns/s").arg(QString::number(status.currentVelocityLimit, 'f', 4));
+        report << QStringLiteral("Current Limit: %1 A").arg(QString::number(status.currentCurrentLimit, 'f', 4));
+        report << QStringLiteral("Traj Vel Limit: %1").arg(QString::number(status.trajVelLimit, 'f', 4));
+        report << QStringLiteral("Traj Accel Limit: %1").arg(QString::number(status.trajAccelLimit, 'f', 4));
+        report << QStringLiteral("Traj Decel Limit: %1").arg(QString::number(status.trajDecelLimit, 'f', 4));
+        report << QStringLiteral("Traj Inertia: %1").arg(QString::number(status.trajInertia, 'f', 4));
+        report << QStringLiteral("Pos Gain: %1").arg(QString::number(status.posGain, 'f', 6));
+        report << QStringLiteral("Vel Gain: %1").arg(QString::number(status.velGain, 'f', 6));
+        report << QStringLiteral("Vel Integrator Gain: %1").arg(QString::number(status.velIntegratorGain, 'f', 6));
+        report << QString();
+
+        report << QStringLiteral("[6] %1").arg(zh("e8af8ae696ade7bb93e8aeba"));
+
+        if (status.axisError == 0 && status.activeErrors == 0 && status.motorError == 0
+                && status.encoderError == 0 && status.controllerError == 0 && status.sensorlessError == 0) {
+            addFinding(okTag + zh("e697a0e6b4bbe58aa8e69585e99a9ce4bd8d"));
+        } else {
+            if (status.axisError != 0) {
+                addFinding(severeTag + zh("e8bdb4e99499e8afafefbc9a2531").arg(describeAxisError(status.axisError)));
+                addRecommendation(zh("e58588e6b885e99499efbc8ce5868de7a1aee8aea42072657175657374656420737461746520e4b88ee5bd93e5898de8bdb4e78ab6e68081e698afe590a6e4b880e887b4"));
+            }
+            if (status.activeErrors != 0) {
+                addFinding(severeTag + zh("4f4472697665e7b3bbe7bb9fe99499e8afafefbc9a2531").arg(describeOdriveError(status.activeErrors)));
+                addRecommendation(zh("e6a380e69fa5e6af8de7babfe4be9be794b5e38081e588b6e58aa8e794b5e998bbe38081e680bbe7babfe7a8b3e5ae9ae680a7"));
+            }
+            if (status.motorError != 0) {
+                addFinding(severeTag + zh("e794b5e69cbae99499e8afafefbc9a2531").arg(describeMotorError(status.motorError)));
+                addRecommendation(zh("e6a380e69fa5e794b5e69cbae58f82e695b0e38081e79bb8e7babfe8bf9ee68ea5e38081e4be9be794b5e4b88ee6b8a9e5baa6"));
+            }
+            if (status.encoderError != 0) {
+                addFinding(severeTag + zh("e7bc96e7a081e599a8e99499e8afafefbc9a2531").arg(describeEncoderError(status.encoderError)));
+                addRecommendation(zh("e6a380e69fa5e7bc96e7a081e599a8e8bf9ee7babfe38081435052e38081e69e81e5afb9e695b0e4b88ee6a0a1e58786e78ab6e68081"));
+            }
+            if (status.controllerError != 0) {
+                addFinding(severeTag + zh("e68ea7e588b6e599a8e99499e8afafefbc9a2531").arg(describeControllerError(status.controllerError)));
+                addRecommendation(zh("e6a380e69fa5e68ea7e588b6e6a8a1e5bc8fe38081e8be93e585a5e6a8a1e5bc8fe38081e9809fe5baa6e99990e588b6e38081e794b5e6b581e99990e588b6e4b88ee58f8de9a688e696b9e59091"));
+            }
+            if (status.sensorlessError != 0) {
+                addFinding(warningTag + zh("e697a0e6849fe4bcb0e7ae97e599a8e99499e8afafefbc9a2531").arg(describeSensorlessError(status.sensorlessError)));
+            }
+        }
+
+        if (status.axisState == ODriveMotorController::ClosedLoopControl) {
+            addFinding(okTag + zh("e5bd93e5898de88a82e782b9e5b7b2e8bf9be585a5e997ade78eafe68ea7e588b6"));
+        } else {
+            addFinding(warningTag + zh("e5bd93e5898de88a82e782b9e69caae59ca8e997ade78eafe68ea7e588b6efbc8ce78ab6e68081e4b8ba202531")
+                           .arg(ODriveMotorController::axisStateName(status.axisState)));
+            addRecommendation(zh("e88ba5e99c80e8a681e8bf90e8a18ce794b5e69cbaefbc8ce8afb7e7a1aee8aea4e6a0a1e58786e5ae8ce68890e5908ee9878de696b0e8bf9be585a5e997ade78eaf"));
+        }
+
+        if (!status.lastHeartbeat.isValid()) {
+            addFinding(warningTag + zh("e5b09ae69caae694b6e588b0e69c89e69588e5bf83e8b7b3efbc8ce9809ae4bfa1e58fafe883bde4b88de7a8b3e5ae9ae68896e88a82e782b9e69caae5938de5ba94"));
+            addRecommendation(zh("e7a1aee8aea42043414e20e9809ae4bfa1e38081e88a82e782b920494420e4b88ee5b883e7babf"));
+        }
+
+        if (status.busVoltageVolts < 10.0f) {
+            addFinding(severeTag + zh("e6af8de7babfe794b5e58e8be8bf87e4bd8eefbc8ce5ad98e59ca8e6aca0e58e8be9a38ee999a9"));
+            addRecommendation(zh("e6a380e69fa5e794b5e6ba90e38081e794b5e6b1a0e38081e794b5e6ba90e7babfe58e8be9998de4b88ee68ea5e68f92e4bbb6"));
+        } else if (status.busVoltageVolts < 20.0f) {
+            addFinding(warningTag + zh("e6af8de7babfe794b5e58e8be5818fe4bd8eefbc8ce5bbbae8aeaee7a1aee8aea4e4be9be794b5e7a8b3e5ae9ae680a7"));
+        } else {
+            addFinding(okTag + zh("e6af8de7babfe794b5e58e8be5a484e4ba8ee58fafe794a8e88c83e59bb4"));
+        }
+
+        if (status.fetTemperatureCelsius > 85.0f || status.motorTemperatureCelsius > 85.0f) {
+            addFinding(severeTag + zh("e6b8a9e5baa6e8bf87e9ab98efbc8ce5ad98e59ca8e8bf87e6b8a9e4bf9de68aa4e9a38ee999a9"));
+            addRecommendation(zh("e9998de4bd8ee794b5e6b5812fe8b49fe8bdbdefbc8ce6a380e69fa5e695a3e783ade4b88ee69cbae6a2b0e998bbe58a9b"));
+        } else if (status.fetTemperatureCelsius > 70.0f || status.motorTemperatureCelsius > 70.0f) {
+            addFinding(warningTag + zh("e6b8a9e5baa6e5818fe9ab98efbc8ce5bbbae8aeaee585b3e6b3a8e995bfe697b6e997b4e8bf90e8a18ce7a8b3e5ae9ae680a7"));
+        }
+
+        if (status.currentControlMode == ODriveMotorController::VelocityControl
+                && status.currentInputMode != ODriveMotorController::Passthrough) {
+            addFinding(warningTag + zh("e5bd93e5898de4b8bae9809fe5baa6e68ea7e588b6efbc8ce4bd86e8be93e585a5e6a8a1e5bc8fe4b88de698afe79bb4e9809ae6a8a1e5bc8f"));
+        }
+
+        if (status.currentControlMode == ODriveMotorController::TorqueControl
+                && qFuzzyIsNull(status.velocityTurnsPerSecond) && !qFuzzyIsNull(status.torqueTargetNm)
+                && status.controllerError != 0) {
+            addFinding(warningTag + zh("e79baee6a087e58a9be79fa9e99d9ee99bb6e4bd86e9809fe5baa6e4b8bae99bb6e4b894e68ea7e588b6e599a8e68aa5e99499efbc8ce99c80e68e92e69fa5e997ade78eafe78ab6e680812fe99990e6b5812fe6aca0e58e8b"));
+        }
+
+        if (status.currentVelocityLimit <= 0.0f) {
+            addFinding(severeTag + zh("e9809fe5baa6e99990e588b6e4b8ba30efbc8ce5bd93e5898de88a82e782b9e697a0e6b395e6ada3e5b8b8e8bf90e8a18c"));
+            addRecommendation(zh("e8aebee7bdaee59088e79086e79a842076656c6f63697479206c696d697420e5908ee5868de6b58be8af95"));
+        }
+
+        if (status.currentCurrentLimit <= 0.0f) {
+            addFinding(severeTag + zh("e794b5e6b581e99990e588b6e4b8ba30efbc8ce5bd93e5898de88a82e782b9e697a0e6b395e8be93e587bae69c89e69588e9a9b1e58aa8e58a9b"));
+            addRecommendation(zh("e8aebee7bdaee59088e79086e79a842063757272656e74206c696d6974"));
+        }
+
+        if (nodeId == 0) {
+            report << QStringLiteral("[6.1] %1").arg(zh("e88a82e782b930e4b893e9a1b9e6a380e69fa5"));
+
+            if (status.currentVelocityLimit > 8.0f) {
+                addFinding(warningTag + zh("e88a82e782b9302076656c6f63697479206c696d697420e5bd93e5898de4b8ba202531207475726e732f73efbc8ce5818fe9ab98efbc8ce5aeb9e69893e587bae78eb0e9809fe5baa6e8bf87e5bfabe68896e99c87e58aa8")
+                               .arg(QString::number(status.currentVelocityLimit, 'f', 4)));
+                addRecommendation(zh("e88a82e782b930e5bbbae8aeaee58588e9998de588b0e4bf9de5ae88e9809fe5baa6e99990e588b6e5908ee5868de9aa8ce8af81"));
+            } else if (status.currentVelocityLimit > 0.0f) {
+                addFinding(okTag + zh("e88a82e782b9302076656c6f63697479206c696d697420e5a484e4ba8ee79bb8e5afb9e4bf9de5ae88e88c83e59bb4"));
+            }
+
+            if (status.velGain > 0.03f) {
+                addFinding(warningTag + zh("e88a82e782b9302076656c5f6761696e3d253120e5818fe9ab98efbc8ce58fafe883bde5bc95e58f91e68cafe88da1")
+                               .arg(QString::number(status.velGain, 'f', 6)));
+            } else if (status.velGain > 0.0f && status.velGain < 0.005f) {
+                addFinding(warningTag + zh("e88a82e782b9302076656c5f6761696e3d253120e5818fe4bd8eefbc8ce58fafe883bde5afbce887b4e5938de5ba94e58f91e8bdaf")
+                               .arg(QString::number(status.velGain, 'f', 6)));
+            } else if (status.velGain > 0.0f) {
+                addFinding(okTag + zh("e88a82e782b9302076656c5f6761696e20e5a484e4ba8ee58fafe68ea5e58f97e88c83e59bb4"));
+            }
+
+            if (status.velIntegratorGain > 0.2f) {
+                addFinding(warningTag + zh("e88a82e782b9302076656c5f696e7465677261746f725f6761696e3d253120e5818fe9ab98efbc8ce58fafe883bde58aa0e589a7e99c87e88da1")
+                               .arg(QString::number(status.velIntegratorGain, 'f', 6)));
+            } else if (status.velIntegratorGain >= 0.0f && status.velIntegratorGain < 0.02f) {
+                addFinding(warningTag + zh("e88a82e782b9302076656c5f696e7465677261746f725f6761696e3d253120e5818fe4bd8eefbc8ce58fafe883bde5afbce887b4e7a8b3e68081e8afafe5b7ae")
+                               .arg(QString::number(status.velIntegratorGain, 'f', 6)));
+            }
+
+            if (status.encoderError == 0 && status.encoderCountInCPR == 0 && status.axisState != ODriveMotorController::Idle) {
+                addFinding(warningTag + zh("e88a82e782b930e7bc96e7a081e599a820436f756e7420496e2043505220e4b8ba30efbc8ce99c80e7a1aee8aea4e7bc96e7a081e599a8e58f8de9a688e698afe590a6e79c9fe5ae9ee69bb4e696b0"));
+                addRecommendation(zh("e6a380e69fa5e88a82e782b930e7bc96e7a081e599a8e4be9be794b5e38081e4bfa1e58fb7e7babfe58f8a435052e9858de7bdae"));
+            }
+
+            if (status.axisError & 0x00000001u) {
+                addFinding(severeTag + zh("e88a82e782b930e587bae78eb020494e56414c49445f5354415445efbc8ce5b8b8e8a781e58e9fe59ba0e698afe69caae6a0a1e58786e38081e7bc96e7a081e599a8e69caae58786e5a487e5a5bde68896e997ade78eafe5898de69c89e99481e5ad98e99499e8afaf"));
+                addRecommendation(zh("e88a82e782b930e9878de782b9e6a380e69fa5e6a0a1e58786e78ab6e68081e38081e7bc96e7a081e599a8e78ab6e68081e5928ce6b885e99499e9a1bae5ba8f"));
+            }
+
+            if (status.axisError & 0x00000200u || status.controllerError != 0) {
+                addFinding(severeTag + zh("e88a82e782b930e5ad98e59ca8e68ea7e588b6e599a8e79bb8e585b3e5bc82e5b8b8efbc8ce99c80e9878de782b9e6a0b8e5afb9e6a8a1e5bc8fe38081e99990e580bce38081e58f8de9a688e696b9e59091e5928ce5a29ee79b8a"));
+            }
+
+            if (qAbs(status.velocityTurnsPerSecond) > status.currentVelocityLimit * 1.2f
+                    && status.currentVelocityLimit > 0.0f) {
+                addFinding(severeTag + zh("e88a82e782b930e5ae9ee99985e9809fe5baa6e8b685e8bf87e5bd93e5898d2076656c6f63697479206c696d6974efbc8ce99c80e68e92e69fa5e58f82e695b0e38081e58f8de9a688e696b9e59091e68896e68ea7e588b6e5bc82e5b8b8"));
+                addRecommendation(zh("e6a380e69fa5e9809fe5baa6e58f8de9a688e696b9e59091e38081e7bc96e7a081e599a8e6a087e5ae9ae4b88e206f766572737065656420e59cbae699af"));
+            }
+
+            if (!qFuzzyIsNull(status.torqueTargetNm) && qFuzzyIsNull(status.torqueEstimateNm)
+                    && status.axisState == ODriveMotorController::ClosedLoopControl) {
+                addFinding(warningTag + zh("e88a82e782b930e5ad98e59ca8e79baee6a087e58a9be79fa9e4bd86e4bcb0e7ae97e58a9be79fa9e68ea5e8bf9130efbc8ce99c80e7a1aee8aea4e9a9b1e58aa8e8be93e587bae4b88ee69cbae6a2b0e8b49fe8bdbd"));
+            }
+
+            report << zh("e88a82e782b930e9878de782b9e585b3e6b3a8efbc9a43414e204944202f20e7bc96e7a081e599a8e58f8de9a688202f20e997ade78eafe78ab6e68081202f2076656c6f63697479206c696d6974202f2076656c5f6761696e202f2076656c5f696e7465677261746f725f6761696e202f20e99c87e58aa8e9a38ee999a9");
+            report << QString();
+        }
+
+        if (findings.isEmpty()) {
+            addFinding(okTag + zh("e697a0e5bc82e5b8b8e7bb93e8aeba"));
+        }
+
+        report << QStringLiteral("%1: %2").arg(zh("e4b8a5e9878de997aee9a298e695b0"), criticalCount);
+        report << QStringLiteral("%1: %2").arg(zh("e8ada6e5918ae695b0"), warningCount);
+        report << findings;
+        report << QString();
+        report << QStringLiteral("[7] %1").arg(zh("e5bbbae8aeaee58aa8e4bd9c"));
+
+        addRecommendation(zh("e58588e588b7e696b0e78ab6e68081efbc8ce7a1aee8aea4e99499e8afafe698afe590a6e68c81e7bbade5ad98e59ca8"));
+        if (criticalCount > 0 || warningCount > 0) {
+            addRecommendation(zh("e88ba5e5ad98e59ca8e99499e8afafefbc8ce58588e6b885e99499e5908ee9878de696b0e8afbbe58f96"));
+            addRecommendation(zh("e88ba5e69caae8bf9be997ade78eafefbc8ce7a1aee8aea4e5b7b2e6a0a1e58786e5908ee5868de5b09de8af95e8bf9be585a5e997ade78eaf"));
+            addRecommendation(zh("e88ba5e4b8bae7bc96e7a081e599a82fe68ea7e588b6e599a8e99499e8afafefbc8ce4bc98e58588e6a380e69fa520435052e38081e68ea7e588b6e6a8a1e5bc8fe38081e8be93e585a5e6a8a1e5bc8fe38081e9809fe5baa62fe794b5e6b581e99990e588b6"));
+            addRecommendation(zh("e88ba5e4b8bae6aca0e58e8be68896e68e89e997ade78eafefbc8ce4bc98e58588e6a380e69fa5e4be9be794b5e38081e7babfe7bc86e5928ce680bbe7babfe7a8b3e5ae9ae680a7"));
+        }
+
+        for (int i = 0; i < recommendations.size(); ++i) {
+            report << QStringLiteral("%1. %2").arg(i + 1).arg(recommendations.at(i));
+        }
+
+        const QString reportText = report.join(QStringLiteral("\n"));
+        appendLog(QStringLiteral("[%1 Node %2] %3")
+                  .arg(boardDisplayName(boardIndex))
+                  .arg(nodeId)
+                  .arg(zh("e5b7b2e7949fe68890e8af8ae696ade68aa5e5918a")));
+        appendLog(reportText);
+        
+        // 自动修复逻辑
+        if (criticalCount > 0 || warningCount > 0) {
+            appendLog(QStringLiteral("========== %1 ==========").arg(zh("e5bc80e5a78be887aae58aa8e4bfaee5a48d")));
+            
+            QTimer::singleShot(500, this, [this, controller, nodeId, status]() {
+                // 1. 清除错误
+                if (status.axisError != 0 || status.activeErrors != 0 || status.motorError != 0 
+                    || status.encoderError != 0 || status.controllerError != 0) {
+                    appendLog(zh("e6ada5e9aaa431efbc9ae6b885e999a4e99499e8afaf"));
+                    controller->clearErrors(nodeId, false);
+                }
+                
+                QTimer::singleShot(500, this, [this, controller, nodeId, status]() {
+                    // 2. 检查并修复速度限制
+                    if (status.currentVelocityLimit <= 0.0f || status.currentVelocityLimit > 20.0f) {
+                        appendLog(zh("e6ada5e9aaa432efbc9ae8aebee7bdaee9809fe5baa6e99990e588b6"));
+                        const float safeVelLimit = (nodeId == 0) ? 5.0f : 20.0f;
+                        controller->setLimits(nodeId, safeVelLimit, qMax(10.0f, status.currentCurrentLimit));
+                    }
+                    
+                    // 3. 检查并修复电流限制
+                    if (status.currentCurrentLimit <= 0.0f) {
+                        appendLog(zh("e6ada5e9aaa433efbc9ae8aebee7bdaee794b5e6b581e99990e588b6"));
+                        controller->setLimits(nodeId, qMax(5.0f, status.currentVelocityLimit), 10.0f);
+                    }
+                    
+                    QTimer::singleShot(500, this, [this, controller, nodeId, status]() {
+                        // 4. 如果有INVALID_STATE错误，尝试重新进入闭环
+                        if (status.axisError & 0x00000001u) {
+                            appendLog(zh("e6ada5e9aaa434efbc9ae4bfaee5a48d494e56414c49445f5354415445e99499e8afaf"));
+                            controller->requestIdle(nodeId);
+                            
+                            QTimer::singleShot(1000, this, [this, controller, nodeId]() {
+                                controller->clearErrors(nodeId, false);
+                                
+                                QTimer::singleShot(500, this, [this, controller, nodeId]() {
+                                    appendLog(zh("e5b09de8af95e9878de696b0e8bf9be585a5e997ade78eaf"));
+                                    controller->requestClosedLoop(nodeId);
+                                    
+                                    QTimer::singleShot(1000, this, [this, controller, nodeId]() {
+                                        const ODriveMotorController::AxisStatus &finalStatus = controller->status(nodeId);
+                                        if (finalStatus.axisError == 0 && finalStatus.axisState == 8) {
+                                            appendLog(zh("e4bfaee5a48de68890e58a9fefbc8ce794b5e69cbae5b7b2e8bf9be585a5e997ade78eaf"));
+                                        } else {
+                                            appendLog(zh("e4bfaee5a48de5a4b1e8b4a5efbc8ce8afb7e6a380e69fa5e7a1ace4bbb6e8bf9ee68ea5e68896e9858de7bdae"));
+                                        }
+                                        appendLog(QStringLiteral("========== %1 ==========").arg(zh("e4bfaee5a48de5ae8ce68890")));
+                                        updateStatusPanel();
+                                    });
+                                });
+                            });
+                        } else if (status.axisState != ODriveMotorController::ClosedLoopControl) {
+                            // 5. 如果不在闭环状态，尝试进入闭环
+                            appendLog(zh("e6ada5e9aaa435efbc9ae5b09de8af95e8bf9be585a5e997ade78eaf"));
+                            controller->requestClosedLoop(nodeId);
+                            
+                            QTimer::singleShot(1000, this, [this, controller, nodeId]() {
+                                const ODriveMotorController::AxisStatus &finalStatus = controller->status(nodeId);
+                                if (finalStatus.axisError == 0 && finalStatus.axisState == 8) {
+                                    appendLog(zh("e4bfaee5a48de68890e58a9fefbc8ce794b5e69cbae5b7b2e8bf9be585a5e997ade78eaf"));
+                                } else {
+                                    appendLog(zh("e4bfaee5a48de983a8e58886e68890e58a9fefbc8ce4bd86e4bb8de69c89e5bc82e5b8b8"));
+                                }
+                                appendLog(QStringLiteral("========== %1 ==========").arg(zh("e4bfaee5a48de5ae8ce68890")));
+                                updateStatusPanel();
+                            });
+                        } else {
+                            appendLog(zh("e697a0e99c80e8bf9be4b880e6ada5e4bfaee5a48defbc8ce78ab6e68081e6ada3e5b8b8"));
+                            appendLog(QStringLiteral("========== %1 ==========").arg(zh("e4bfaee5a48de5ae8ce68890")));
+                            updateStatusPanel();
+                        }
+                    });
+                });
+            });
+        }
+    });
+}
+
+void MainWindow::initializeMachine()
+{
+    ODriveMotorController *controller = currentDebugController();
+    if (!controller || !controller->isConnected()) {
+        appendLog(zh("e695b4e69cbae5889de5a78be58c96e5a4b1e8b4a5efbc9ae69caae8bf9ee68ea5"));
+        qInfo() << "Machine initialization failed: not connected";
+        return;
+    }
+
+    const quint8 nodeId = currentDebugNodeId();
+    appendLog(QStringLiteral("========== %1 ==========").arg(zh("e5bc80e5a78be695b4e69cbae5889de5a78be58c96")));
+    qInfo() << "========== Starting Machine Initialization ==========";
+
+    appendLog(zh("e6ada5e9aaa431efbc9ae8bf9be585a5e7a9bae997b2e78ab6e68081"));
+    qInfo() << "Step 1: Entering IDLE state";
+    controller->requestIdle(nodeId);
+
+    QTimer::singleShot(500, this, [this, controller, nodeId]() {
+        appendLog(zh("e6ada5e9aaa432efbc9ae6b885e999a4e99499e8afaf"));
+        qInfo() << "Step 2: Clearing errors";
+        controller->clearErrors(nodeId, false);
+
+        QTimer::singleShot(500, this, [this, controller, nodeId]() {
+            appendLog(zh("e6ada5e9aaa433efbc9ae689a7e8a18ce5ae8ce695b4e6a0a1e58786"));
+            qInfo() << "Step 3: Running full calibration";
+            controller->requestFullCalibration(nodeId);
+
+            QTimer::singleShot(12000, this, [this, controller, nodeId]() {
+                const ODriveMotorController::AxisStatus &status = controller->status(nodeId);
+
+                if (status.axisError == 0) {
+                    appendLog(zh("e6ada5e9aaa434efbc9ae6a0a1e58786e68890e58a9fefbc8ce8bf9be585a5e997ade78eaf"));
+                    qInfo() << "Step 4: Calibration successful, entering closed loop";
+                    controller->requestClosedLoop(nodeId);
+
+                    QTimer::singleShot(1000, this, [this, controller, nodeId]() {
+                        const ODriveMotorController::AxisStatus &finalStatus = controller->status(nodeId);
+
+                        if (finalStatus.axisError == 0 && finalStatus.axisState == 8) {
+                            appendLog(zh("e695b4e69cbae5889de5a78be58c96e5ae8ce68890efbc8ce794b5e69cbae5b7b2e5b0b1e7bbaa"));
+                            qInfo() << "Machine initialization complete! Motor is ready";
+                        } else {
+                            appendLog(zh("e5889de5a78be58c96e5ae8ce68890e4bd86e4bb8de69c89e5bc82e5b8b8efbc9ae8bdb4e99499e8afaf3d30782531efbc8ce8bdb4e78ab6e680813d2532")
+                                      .arg(QString::number(finalStatus.axisError, 16).toUpper())
+                                      .arg(finalStatus.axisState));
+                            qInfo() << "Machine initialization complete but has errors:"
+                                    << QString::number(finalStatus.axisError, 16)
+                                    << "state:" << finalStatus.axisState;
+                        }
+
+                        appendLog(QStringLiteral("========== %1 ==========").arg(zh("e5889de5a78be58c96e5ae8ce68890")));
+                        qInfo() << "========== Initialization Complete ==========";
+                        updateStatusPanel();
+                    });
+                } else {
+                    appendLog(zh("e6a0a1e58786e5a4b1e8b4a5efbc9ae8bdb4e99499e8afaf3d30782531")
+                              .arg(QString::number(status.axisError, 16).toUpper()));
+                    qInfo() << "Calibration failed, error:" << QString::number(status.axisError, 16);
+                    appendLog(QStringLiteral("========== %1 ==========").arg(zh("e5889de5a78be58c96e5a4b1e8b4a5")));
+                    qInfo() << "========== Initialization Failed ==========";
+                    updateStatusPanel();
+                }
+            });
+        });
     });
 }
 

@@ -531,7 +531,16 @@ bool ODriveMotorController::requestFullCalibration(quint8 nodeId) { return reque
 bool ODriveMotorController::setControllerMode(ControlMode controlMode, InputMode inputMode) { return setControllerMode(m_nodeId, controlMode, inputMode); }
 bool ODriveMotorController::setControllerMode(quint8 nodeId, ControlMode controlMode, InputMode inputMode)
 {
-    QByteArray payload; appendUInt32(payload, quint32(controlMode)); appendUInt32(payload, quint32(inputMode)); return sendFrame(nodeId, SetControllerMode, payload);
+    QByteArray payload;
+    appendUInt32(payload, quint32(controlMode));
+    appendUInt32(payload, quint32(inputMode));
+    bool success = sendFrame(nodeId, SetControllerMode, payload);
+    if (success) {
+        AxisStatus &s = m_statusByNode[nodeId];
+        s.currentControlMode = static_cast<quint8>(controlMode);
+        s.currentInputMode = static_cast<quint8>(inputMode);
+    }
+    return success;
 }
 bool ODriveMotorController::setPosition(float p, float v, float t) { return setPosition(m_nodeId, p, v, t); }
 bool ODriveMotorController::setPosition(quint8 nodeId, float positionTurns, float velocityFeedforwardTurnsPerSecond, float torqueFeedforwardNm)
@@ -554,7 +563,16 @@ bool ODriveMotorController::setTorque(quint8 nodeId, float torqueNm)
 bool ODriveMotorController::setLimits(float v, float c) { return setLimits(m_nodeId, v, c); }
 bool ODriveMotorController::setLimits(quint8 nodeId, float velocityLimitTurnsPerSecond, float currentLimitAmps)
 {
-    QByteArray payload; appendFloat(payload, velocityLimitTurnsPerSecond); appendFloat(payload, currentLimitAmps); return sendFrame(nodeId, SetLimits, payload);
+    QByteArray payload;
+    appendFloat(payload, velocityLimitTurnsPerSecond);
+    appendFloat(payload, currentLimitAmps);
+    bool success = sendFrame(nodeId, SetLimits, payload);
+    if (success) {
+        AxisStatus &s = m_statusByNode[nodeId];
+        s.currentVelocityLimit = velocityLimitTurnsPerSecond;
+        s.currentCurrentLimit = currentLimitAmps;
+    }
+    return success;
 }
 bool ODriveMotorController::estop() { return estop(m_nodeId); }
 bool ODriveMotorController::estop(quint8 nodeId) { return sendFrame(nodeId, EstopCommand, QByteArray()); }
@@ -566,8 +584,15 @@ bool ODriveMotorController::clearErrors(quint8 nodeId, bool identify)
 void ODriveMotorController::requestAllTelemetry(bool quiet) { requestAllTelemetry(m_nodeId, quiet); }
 void ODriveMotorController::requestAllTelemetry(quint8 nodeId, bool quiet)
 {
-    requestRemoteFrame(nodeId, GetError, quiet); requestRemoteFrame(nodeId, GetEncoderEstimates, quiet); requestRemoteFrame(nodeId, GetIq, quiet);
-    requestRemoteFrame(nodeId, GetTemperature, quiet); requestRemoteFrame(nodeId, GetBusVoltageCurrent, quiet); requestRemoteFrame(nodeId, GetTorques, quiet); requestRemoteFrame(nodeId, GetPowers, quiet);
+    requestRemoteFrame(nodeId, GetEncoderEstimates, quiet);
+    requestRemoteFrame(nodeId, GetIq, quiet);
+    requestRemoteFrame(nodeId, GetBusVoltageCurrent, quiet);
+    requestRemoteFrame(nodeId, GetTorques, quiet);
+    requestRemoteFrame(nodeId, GetMotorError, quiet);
+    requestRemoteFrame(nodeId, GetEncoderError, quiet);
+    requestRemoteFrame(nodeId, GetControllerError, quiet);
+    requestRemoteFrame(nodeId, GetEncoderCount, quiet);
+    requestRemoteFrame(nodeId, GetSensorlessEstimates, quiet);
 }
 void ODriveMotorController::requestTrackedTelemetry(bool quiet)
 {
@@ -577,13 +602,14 @@ void ODriveMotorController::requestTrackedTelemetry(bool quiet)
 void ODriveMotorController::probeNode(quint8 nodeId)
 {
     requestRemoteFrame(nodeId, GetEncoderEstimates, true);
-    requestRemoteFrame(nodeId, GetBusVoltageCurrent, true);
 }
 
 void ODriveMotorController::probeAllNodes()
 {
-    emit logMessage(QStringLiteral("Probing CAN nodes 0..63 for ODrive replies."));
-    for (int node = 0; node < 64; ++node) {
+    const int safeMaxNode = 8;
+    emit logMessage(QStringLiteral("Probing CAN nodes 0..%1 for ODrive replies (safe scan mode).")
+                    .arg(safeMaxNode));
+    for (int node = 0; node <= safeMaxNode; ++node) {
         probeNode(static_cast<quint8>(node));
     }
 }
@@ -1079,18 +1105,6 @@ bool ODriveMotorController::processFrame(quint8 nodeId, quint32 frameId, const Q
             }
         }
         break;
-    case GetError:
-        if (payload.size() >= 8) {
-            s.activeErrors = readUInt32(payload, 0);
-            s.disarmReason = readUInt32(payload, 4);
-            s.axisError = s.activeErrors | s.disarmReason;
-            summary = QStringLiteral("Get_Error node=%1 active=%2 disarm=%3 combined=%4")
-                    .arg(QString::number(nodeId),
-                         formatCanId(s.activeErrors),
-                         formatCanId(s.disarmReason),
-                         formatCanId(s.axisError));
-        }
-        break;
     case GetEncoderEstimates:
         if (payload.size() >= 8) {
             s.positionTurns = readFloat(payload, 0);
@@ -1109,16 +1123,6 @@ bool ODriveMotorController::processFrame(quint8 nodeId, quint32 frameId, const Q
                     .arg(QString::number(nodeId),
                          QString::number(s.iqSetpointAmps, 'f', 3),
                          QString::number(s.iqMeasuredAmps, 'f', 3));
-        }
-        break;
-    case GetTemperature:
-        if (payload.size() >= 8) {
-            s.fetTemperatureCelsius = readFloat(payload, 0);
-            s.motorTemperatureCelsius = readFloat(payload, 4);
-            summary = QStringLiteral("Get_Temperature node=%1 fet=%2 C motor=%3 C")
-                    .arg(QString::number(nodeId),
-                         QString::number(s.fetTemperatureCelsius, 'f', 2),
-                         QString::number(s.motorTemperatureCelsius, 'f', 2));
         }
         break;
     case GetBusVoltageCurrent:
@@ -1141,14 +1145,56 @@ bool ODriveMotorController::processFrame(quint8 nodeId, quint32 frameId, const Q
                          QString::number(s.torqueEstimateNm, 'f', 3));
         }
         break;
-    case GetPowers:
+    case GetMotorError:
         if (payload.size() >= 8) {
-            s.electricalPowerWatts = readFloat(payload, 0);
-            s.mechanicalPowerWatts = readFloat(payload, 4);
-            summary = QStringLiteral("Get_Powers node=%1 electrical=%2 W mechanical=%3 W")
-                    .arg(QString::number(nodeId),
-                         QString::number(s.electricalPowerWatts, 'f', 2),
-                         QString::number(s.mechanicalPowerWatts, 'f', 2));
+            s.motorError = readUInt32(payload, 0);
+            summary = QStringLiteral("Get_Motor_Error node=%1 error=0x%2")
+                    .arg(QString::number(nodeId))
+                    .arg(s.motorError, 8, 16, QLatin1Char('0')).toUpper();
+        }
+        break;
+    case GetEncoderError:
+        if (payload.size() >= 4) {
+            s.encoderError = readUInt32(payload, 0);
+            summary = QStringLiteral("Get_Encoder_Error node=%1 error=0x%2")
+                    .arg(QString::number(nodeId))
+                    .arg(s.encoderError, 8, 16, QLatin1Char('0')).toUpper();
+        }
+        break;
+    case GetSensorlessError:
+        if (payload.size() >= 4) {
+            s.sensorlessError = readUInt32(payload, 0);
+            summary = QStringLiteral("Get_Sensorless_Error node=%1 error=0x%2")
+                    .arg(QString::number(nodeId))
+                    .arg(s.sensorlessError, 8, 16, QLatin1Char('0')).toUpper();
+        }
+        break;
+    case GetEncoderCount:
+        if (payload.size() >= 8) {
+            s.encoderShadowCount = static_cast<qint32>(readUInt32(payload, 0));
+            s.encoderCountInCPR = static_cast<qint32>(readUInt32(payload, 4));
+            summary = QStringLiteral("Get_Encoder_Count node=%1 shadow=%2 cpr=%3")
+                    .arg(QString::number(nodeId))
+                    .arg(s.encoderShadowCount)
+                    .arg(s.encoderCountInCPR);
+        }
+        break;
+    case GetSensorlessEstimates:
+        if (payload.size() >= 8) {
+            s.sensorlessPosEstimate = readFloat(payload, 0);
+            s.sensorlessVelEstimate = readFloat(payload, 4);
+            summary = QStringLiteral("Get_Sensorless_Estimates node=%1 pos=%2 vel=%3")
+                    .arg(QString::number(nodeId))
+                    .arg(QString::number(s.sensorlessPosEstimate, 'f', 3))
+                    .arg(QString::number(s.sensorlessVelEstimate, 'f', 3));
+        }
+        break;
+    case GetControllerError:
+        if (payload.size() >= 4) {
+            s.controllerError = readUInt32(payload, 0);
+            summary = QStringLiteral("Get_Controller_Error node=%1 error=0x%2")
+                    .arg(QString::number(nodeId))
+                    .arg(s.controllerError, 8, 16, QLatin1Char('0')).toUpper();
         }
         break;
     default: return false;
@@ -1216,19 +1262,54 @@ void ODriveMotorController::setConnectedState(bool connected)
 QString ODriveMotorController::commandName(CommandId commandId)
 {
     switch (commandId) {
-    case Heartbeat: return QObject::tr("Heartbeat"); case EstopCommand: return QObject::tr("Estop"); case GetError: return QObject::tr("Get_Error");
-    case SetAxisState: return QObject::tr("Set_Axis_State"); case GetEncoderEstimates: return QObject::tr("Get_Encoder_Estimates");
-    case SetControllerMode: return QObject::tr("Set_Controller_Mode"); case SetInputPos: return QObject::tr("Set_Input_Pos");
-    case SetInputVel: return QObject::tr("Set_Input_Vel"); case SetInputTorque: return QObject::tr("Set_Input_Torque");
-    case SetLimits: return QObject::tr("Set_Limits"); case GetIq: return QObject::tr("Get_Iq"); case GetTemperature: return QObject::tr("Get_Temperature");
-    case GetBusVoltageCurrent: return QObject::tr("Get_Bus_Voltage_Current"); case ClearErrors: return QObject::tr("Clear_Errors");
-    case GetTorques: return QObject::tr("Get_Torques"); case GetPowers: return QObject::tr("Get_Powers"); default: return QObject::tr("Unknown");
+    case Heartbeat: return QObject::tr("Heartbeat");
+    case EstopCommand: return QObject::tr("Estop");
+    case GetMotorError: return QObject::tr("Get_Motor_Error");
+    case GetEncoderError: return QObject::tr("Get_Encoder_Error");
+    case GetSensorlessError: return QObject::tr("Get_Sensorless_Error");
+    case SetAxisNodeId: return QObject::tr("Set_Axis_Node_ID");
+    case SetAxisState: return QObject::tr("Set_Axis_State");
+    case GetEncoderEstimates: return QObject::tr("Get_Encoder_Estimates");
+    case GetEncoderCount: return QObject::tr("Get_Encoder_Count");
+    case SetControllerMode: return QObject::tr("Set_Controller_Mode");
+    case SetInputPos: return QObject::tr("Set_Input_Pos");
+    case SetInputVel: return QObject::tr("Set_Input_Vel");
+    case SetInputTorque: return QObject::tr("Set_Input_Torque");
+    case SetLimits: return QObject::tr("Set_Limits");
+    case StartAnticogging: return QObject::tr("Start_Anticogging");
+    case SetTrajVelLimit: return QObject::tr("Set_Traj_Vel_Limit");
+    case SetTrajAccelLimits: return QObject::tr("Set_Traj_Accel_Limits");
+    case SetTrajInertia: return QObject::tr("Set_Traj_Inertia");
+    case GetIq: return QObject::tr("Get_Iq");
+    case GetSensorlessEstimates: return QObject::tr("Get_Sensorless_Estimates");
+    case RebootODrive: return QObject::tr("Reboot_ODrive");
+    case GetBusVoltageCurrent: return QObject::tr("Get_Bus_Voltage_Current");
+    case ClearErrors: return QObject::tr("Clear_Errors");
+    case SetLinearCount: return QObject::tr("Set_Linear_Count");
+    case SetPositionGain: return QObject::tr("Set_Position_Gain");
+    case SetVelGains: return QObject::tr("Set_Vel_Gains");
+    case GetTorques: return QObject::tr("Get_Torques");
+    case GetControllerError: return QObject::tr("Get_Controller_Error");
+    default: return QObject::tr("Unknown");
     }
 }
 
 int ODriveMotorController::expectedReplyLength(CommandId commandId)
 {
-    switch (commandId) { case Heartbeat: return 7; case GetError: case GetEncoderEstimates: case GetIq: case GetTemperature: case GetBusVoltageCurrent: case GetTorques: case GetPowers: return 8; default: return 0; }
+    switch (commandId) {
+    case Heartbeat: return 7;
+    case GetMotorError: return 8;
+    case GetEncoderError: return 4;
+    case GetSensorlessError: return 4;
+    case GetEncoderEstimates:
+    case GetEncoderCount:
+    case GetIq:
+    case GetSensorlessEstimates:
+    case GetBusVoltageCurrent:
+    case GetTorques: return 8;
+    case GetControllerError: return 4;
+    default: return 0;
+    }
 }
 
 void ODriveMotorController::appendUInt32(QByteArray &payload, quint32 value)
@@ -1254,4 +1335,96 @@ quint32 ODriveMotorController::readUInt32(const QByteArray &payload, int offset)
 float ODriveMotorController::readFloat(const QByteArray &payload, int offset)
 {
     quint32 raw = readUInt32(payload, offset); float value = 0.0f; std::memcpy(&value, &raw, sizeof(value)); return value;
+}
+
+// 轨迹控制函数
+bool ODriveMotorController::setTrajVelLimit(float limit) { return setTrajVelLimit(m_nodeId, limit); }
+bool ODriveMotorController::setTrajVelLimit(quint8 nodeId, float limit)
+{
+    QByteArray payload;
+    appendFloat(payload, limit);
+    bool success = sendFrame(nodeId, SetTrajVelLimit, payload);
+    if (success) {
+        AxisStatus &s = m_statusByNode[nodeId];
+        s.trajVelLimit = limit;
+    }
+    return success;
+}
+
+bool ODriveMotorController::setTrajAccelLimits(float accel, float decel) { return setTrajAccelLimits(m_nodeId, accel, decel); }
+bool ODriveMotorController::setTrajAccelLimits(quint8 nodeId, float accel, float decel)
+{
+    QByteArray payload;
+    appendFloat(payload, accel);
+    appendFloat(payload, decel);
+    bool success = sendFrame(nodeId, SetTrajAccelLimits, payload);
+    if (success) {
+        AxisStatus &s = m_statusByNode[nodeId];
+        s.trajAccelLimit = accel;
+        s.trajDecelLimit = decel;
+    }
+    return success;
+}
+
+bool ODriveMotorController::setTrajInertia(float inertia) { return setTrajInertia(m_nodeId, inertia); }
+bool ODriveMotorController::setTrajInertia(quint8 nodeId, float inertia)
+{
+    QByteArray payload;
+    appendFloat(payload, inertia);
+    bool success = sendFrame(nodeId, SetTrajInertia, payload);
+    if (success) {
+        AxisStatus &s = m_statusByNode[nodeId];
+        s.trajInertia = inertia;
+    }
+    return success;
+}
+
+// 增益控制函数
+bool ODriveMotorController::setPositionGain(float gain) { return setPositionGain(m_nodeId, gain); }
+bool ODriveMotorController::setPositionGain(quint8 nodeId, float gain)
+{
+    QByteArray payload;
+    appendFloat(payload, gain);
+    bool success = sendFrame(nodeId, SetPositionGain, payload);
+    if (success) {
+        AxisStatus &s = m_statusByNode[nodeId];
+        s.posGain = gain;
+    }
+    return success;
+}
+
+bool ODriveMotorController::setVelGains(float gain, float integratorGain) { return setVelGains(m_nodeId, gain, integratorGain); }
+bool ODriveMotorController::setVelGains(quint8 nodeId, float gain, float integratorGain)
+{
+    QByteArray payload;
+    appendFloat(payload, gain);
+    appendFloat(payload, integratorGain);
+    bool success = sendFrame(nodeId, SetVelGains, payload);
+    if (success) {
+        AxisStatus &s = m_statusByNode[nodeId];
+        s.velGain = gain;
+        s.velIntegratorGain = integratorGain;
+    }
+    return success;
+}
+
+// 其他控制函数
+bool ODriveMotorController::startAnticogging() { return startAnticogging(m_nodeId); }
+bool ODriveMotorController::startAnticogging(quint8 nodeId)
+{
+    return sendFrame(nodeId, StartAnticogging, QByteArray());
+}
+
+bool ODriveMotorController::rebootODrive() { return rebootODrive(m_nodeId); }
+bool ODriveMotorController::rebootODrive(quint8 nodeId)
+{
+    return sendFrame(nodeId, RebootODrive, QByteArray());
+}
+
+bool ODriveMotorController::setLinearCount(qint32 count) { return setLinearCount(m_nodeId, count); }
+bool ODriveMotorController::setLinearCount(quint8 nodeId, qint32 count)
+{
+    QByteArray payload;
+    appendUInt32(payload, static_cast<quint32>(count));
+    return sendFrame(nodeId, SetLinearCount, payload);
 }

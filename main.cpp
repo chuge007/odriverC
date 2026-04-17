@@ -15,6 +15,12 @@
 #include <QtGlobal>
 
 #include <cstdlib>
+#include <exception>
+#include <typeinfo>
+
+#ifdef Q_OS_WIN
+#include <eh.h>
+#endif
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -117,10 +123,99 @@ void messageHandler(QtMsgType type, const QMessageLogContext &context, const QSt
     }
 }
 
+void logCrashLine(const QString &message)
+{
+    const QString line = QStringLiteral("[%1] [CRASH] %2")
+            .arg(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss.zzz")),
+                 message);
+
+    QTextStream err(stderr);
+    err << line << '\n';
+    err.flush();
+    appendRollingLogLine(line);
+}
+
+class SafeApplication : public QApplication
+{
+public:
+    using QApplication::QApplication;
+
+    bool notify(QObject *receiver, QEvent *event) override
+    {
+        try {
+            return QApplication::notify(receiver, event);
+        } catch (const std::exception &e) {
+            const QString receiverName = receiver
+                    ? QString::fromLatin1(receiver->metaObject()->className())
+                    : QStringLiteral("<null>");
+            const QString eventType = event
+                    ? QString::number(static_cast<int>(event->type()))
+                    : QStringLiteral("<null>");
+            logCrashLine(QStringLiteral("Unhandled std::exception in Qt event loop. receiver=%1 eventType=%2 what=%3")
+                         .arg(receiverName, eventType, QString::fromLocal8Bit(e.what())));
+        } catch (...) {
+            const QString receiverName = receiver
+                    ? QString::fromLatin1(receiver->metaObject()->className())
+                    : QStringLiteral("<null>");
+            const QString eventType = event
+                    ? QString::number(static_cast<int>(event->type()))
+                    : QStringLiteral("<null>");
+            logCrashLine(QStringLiteral("Unhandled unknown exception in Qt event loop. receiver=%1 eventType=%2")
+                         .arg(receiverName, eventType));
+        }
+        return false;
+    }
+};
+
+void terminateHandler()
+{
+    QString detail = QStringLiteral("std::terminate called");
+    const std::exception_ptr exception = std::current_exception();
+    if (exception) {
+        try {
+            std::rethrow_exception(exception);
+        } catch (const std::exception &e) {
+            detail += QStringLiteral(", reason=%1").arg(QString::fromLocal8Bit(e.what()));
+        } catch (...) {
+            detail += QStringLiteral(", reason=<non-std exception>");
+        }
+    }
+    logCrashLine(detail);
+    abort();
+}
+
+#ifdef Q_OS_WIN
+LONG WINAPI unhandledExceptionFilter(EXCEPTION_POINTERS *exceptionInfo)
+{
+    const DWORD code = exceptionInfo && exceptionInfo->ExceptionRecord
+            ? exceptionInfo->ExceptionRecord->ExceptionCode
+            : 0;
+    const void *address = exceptionInfo && exceptionInfo->ExceptionRecord
+            ? exceptionInfo->ExceptionRecord->ExceptionAddress
+            : nullptr;
+
+    logCrashLine(QStringLiteral("Unhandled Windows SEH exception. code=0x%1 address=%2")
+                 .arg(QString::number(code, 16).toUpper(),
+                      QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(address), 0, 16)));
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+void purecallHandler()
+{
+    logCrashLine(QStringLiteral("Pure virtual function call detected (_purecall)"));
+    abort();
+}
+#endif
+
 void configureQtLogging()
 {
     qputenv("QT_DEBUG_PLUGINS", QByteArrayLiteral("1"));
     qInstallMessageHandler(messageHandler);
+    std::set_terminate(terminateHandler);
+#ifdef Q_OS_WIN
+    ::SetUnhandledExceptionFilter(unhandledExceptionFilter);
+    _set_purecall_handler(purecallHandler);
+#endif
 }
 
 void dumpStartupInfo()
@@ -136,11 +231,22 @@ int main(int argc, char *argv[])
     initializeDebugConsole();
     configureQtLogging();
 
-    QApplication a(argc, argv);
-    dumpStartupInfo();
+    try {
+        SafeApplication a(argc, argv);
+        dumpStartupInfo();
 
-    MainWindow w;
-    w.show();
+        MainWindow w;
+        w.show();
 
-    return a.exec();
+        const int exitCode = a.exec();
+        qInfo() << "Application exited normally with code" << exitCode;
+        return exitCode;
+    } catch (const std::exception &e) {
+        logCrashLine(QStringLiteral("Unhandled std::exception escaped from main(): %1")
+                     .arg(QString::fromLocal8Bit(e.what())));
+    } catch (...) {
+        logCrashLine(QStringLiteral("Unhandled unknown exception escaped from main()"));
+    }
+
+    return EXIT_FAILURE;
 }

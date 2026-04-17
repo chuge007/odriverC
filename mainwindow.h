@@ -6,6 +6,7 @@
 #include <QString>
 #include <QVector>
 #include <QStringList>
+#include <QMap>
 
 class QComboBox;
 class QDialog;
@@ -52,6 +53,10 @@ private slots:
     void sendVelocityCommand();
     void sendTorqueCommand();
     void applyLimits();
+    void readPidParams();
+    void applyPidParams();
+    void runDiagnoseFix();
+    void initializeMachine();
     void refreshTelemetry();
     void openAdvancedPanel();
     void syncAxisReadouts();
@@ -255,6 +260,8 @@ private:
     QPushButton *m_estopButton;
     QPushButton *m_clearErrorsButton;
     QPushButton *m_refreshStatusButton;
+    QPushButton *m_diagnoseFixButton;
+    QPushButton *m_initializeMachineButton;
 
     QDoubleSpinBox *m_positionSpin;
     QDoubleSpinBox *m_positionVelFfSpin;
@@ -271,6 +278,22 @@ private:
     QDoubleSpinBox *m_velocityLimitSpin;
     QDoubleSpinBox *m_currentLimitSpin;
     QPushButton *m_applyLimitsButton;
+
+    QDoubleSpinBox *m_posGainSpin;
+    QDoubleSpinBox *m_velGainSpin;
+    QDoubleSpinBox *m_velIntegratorGainSpin;
+    QDoubleSpinBox *m_velLimitToleranceSpin;
+    QDoubleSpinBox *m_inputFilterBandwidthSpin;
+    QDoubleSpinBox *m_inertiaSpin;
+    QDoubleSpinBox *m_trajVelLimitSpin;
+    QDoubleSpinBox *m_trajAccelLimitSpin;
+    QDoubleSpinBox *m_trajDecelLimitSpin;
+    QDoubleSpinBox *m_torqueRampRateSpin;
+    QDoubleSpinBox *m_torqueLimitSpin;
+    QCheckBox *m_enableVelLimitCheck;
+    QCheckBox *m_enableTorqueModeVelLimitCheck;
+    QPushButton *m_readPidButton;
+    QPushButton *m_applyPidButton;
 
     QLabel *m_axisErrorValue;
     QLabel *m_axisErrorDetailValue;

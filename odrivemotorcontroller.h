@@ -20,20 +20,32 @@ public:
     enum CommandId {
         Heartbeat = 0x01,
         EstopCommand = 0x02,
-        GetError = 0x03,
+        GetMotorError = 0x03,
+        GetEncoderError = 0x04,
+        GetSensorlessError = 0x05,
+        SetAxisNodeId = 0x06,
         SetAxisState = 0x07,
         GetEncoderEstimates = 0x09,
+        GetEncoderCount = 0x0A,
         SetControllerMode = 0x0B,
         SetInputPos = 0x0C,
         SetInputVel = 0x0D,
         SetInputTorque = 0x0E,
         SetLimits = 0x0F,
+        StartAnticogging = 0x10,
+        SetTrajVelLimit = 0x11,
+        SetTrajAccelLimits = 0x12,
+        SetTrajInertia = 0x13,
         GetIq = 0x14,
-        GetTemperature = 0x15,
+        GetSensorlessEstimates = 0x15,
+        RebootODrive = 0x16,
         GetBusVoltageCurrent = 0x17,
         ClearErrors = 0x18,
+        SetLinearCount = 0x19,
+        SetPositionGain = 0x1A,
+        SetVelGains = 0x1B,
         GetTorques = 0x1C,
-        GetPowers = 0x1D
+        GetControllerError = 0x1D
     };
     Q_ENUM(CommandId)
 
@@ -100,6 +112,27 @@ public:
         float mechanicalPowerWatts = 0.0f;
         QDateTime lastHeartbeat;
         QDateTime lastMessage;
+        
+        // 新增字段
+        quint32 motorError = 0;
+        quint32 encoderError = 0;
+        quint32 controllerError = 0;
+        quint32 sensorlessError = 0;
+        qint32 encoderShadowCount = 0;
+        qint32 encoderCountInCPR = 0;
+        float sensorlessPosEstimate = 0.0f;
+        float sensorlessVelEstimate = 0.0f;
+        quint8 currentControlMode = 0;
+        quint8 currentInputMode = 0;
+        float currentVelocityLimit = 0.0f;
+        float currentCurrentLimit = 0.0f;
+        float trajVelLimit = 0.0f;
+        float trajAccelLimit = 0.0f;
+        float trajDecelLimit = 0.0f;
+        float trajInertia = 0.0f;
+        float posGain = 0.0f;
+        float velGain = 0.0f;
+        float velIntegratorGain = 0.0f;
     };
 
     explicit ODriveMotorController(QObject *parent = nullptr);
@@ -163,6 +196,28 @@ public:
     void requestTrackedTelemetry(bool quiet = true);
     void probeNode(quint8 nodeId);
     void probeAllNodes();
+
+    // 轨迹控制
+    bool setTrajVelLimit(float limit);
+    bool setTrajVelLimit(quint8 nodeId, float limit);
+    bool setTrajAccelLimits(float accel, float decel);
+    bool setTrajAccelLimits(quint8 nodeId, float accel, float decel);
+    bool setTrajInertia(float inertia);
+    bool setTrajInertia(quint8 nodeId, float inertia);
+
+    // 增益控制
+    bool setPositionGain(float gain);
+    bool setPositionGain(quint8 nodeId, float gain);
+    bool setVelGains(float gain, float integratorGain);
+    bool setVelGains(quint8 nodeId, float gain, float integratorGain);
+
+    // 其他控制
+    bool startAnticogging();
+    bool startAnticogging(quint8 nodeId);
+    bool rebootODrive();
+    bool rebootODrive(quint8 nodeId);
+    bool setLinearCount(qint32 count);
+    bool setLinearCount(quint8 nodeId, qint32 count);
     bool sendRawCanFrame(quint32 frameId,
                          const QByteArray &payload,
                          bool extendedFrame,

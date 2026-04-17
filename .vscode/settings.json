@@ -1,0 +1,9 @@
+{
+  "kilocode.apiEndpoint": "https://your-api-endpoint.com/v1",
+  "kilocode.apiKey": "sk-Fh7wd***************************************zNbO",
+  "kilocode.model": "gpt-4-turbo-preview",
+  "kilocode.maxTokens": 4096,
+  "kilocode.temperature": 0.7,
+  "kilocode.enableAutoCompletion": true,
+  "kilocode.enableInlineChat": true
+}

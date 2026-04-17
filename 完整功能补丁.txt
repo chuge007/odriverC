@@ -1,0 +1,194 @@
+# ODrive 完整功能实现补丁
+
+## 已完成的修改
+
+### 1. odrivemotorcontroller.h
+✅ 已添加所有新的 CommandId 枚举值
+✅ 已在 AxisStatus 结构体中添加所有新字段
+
+### 2. odrivemotorcontroller.cpp
+✅ 已在 processFrame 中添加所有新命令的处理
+✅ 已更新 requestAllTelemetry 函数请求新的遥测数据
+
+## 还需要完成的修改
+
+### 3. 更新 commandName 函数（在 odrivemotorcontroller.cpp 中）
+
+需要将现有的 commandName 函数替换为：
+
+```cpp
+QString ODriveMotorController::commandName(CommandId commandId)
+{
+    switch (commandId) {
+    case Heartbeat: return QObject::tr("Heartbeat");
+    case EstopCommand: return QObject::tr("Estop");
+    case GetMotorError: return QObject::tr("Get_Motor_Error");
+    case GetEncoderError: return QObject::tr("Get_Encoder_Error");
+    case GetSensorlessError: return QObject::tr("Get_Sensorless_Error");
+    case SetAxisNodeId: return QObject::tr("Set_Axis_Node_ID");
+    case SetAxisState: return QObject::tr("Set_Axis_State");
+    case GetEncoderEstimates: return QObject::tr("Get_Encoder_Estimates");
+    case GetEncoderCount: return QObject::tr("Get_Encoder_Count");
+    case SetControllerMode: return QObject::tr("Set_Controller_Mode");
+    case SetInputPos: return QObject::tr("Set_Input_Pos");
+    case SetInputVel: return QObject::tr("Set_Input_Vel");
+    case SetInputTorque: return QObject::tr("Set_Input_Torque");
+    case SetLimits: return QObject::tr("Set_Limits");
+    case StartAnticogging: return QObject::tr("Start_Anticogging");
+    case SetTrajVelLimit: return QObject::tr("Set_Traj_Vel_Limit");
+    case SetTrajAccelLimits: return QObject::tr("Set_Traj_Accel_Limits");
+    case SetTrajInertia: return QObject::tr("Set_Traj_Inertia");
+    case GetIq: return QObject::tr("Get_Iq");
+    case GetSensorlessEstimates: return QObject::tr("Get_Sensorless_Estimates");
+    case GetTemperature: return QObject::tr("Get_Temperature");
+    case RebootODrive: return QObject::tr("Reboot_ODrive");
+    case GetBusVoltageCurrent: return QObject::tr("Get_Bus_Voltage_Current");
+    case ClearErrors: return QObject::tr("Clear_Errors");
+    case SetLinearCount: return QObject::tr("Set_Linear_Count");
+    case SetPositionGain: return QObject::tr("Set_Position_Gain");
+    case SetVelGains: return QObject::tr("Set_Vel_Gains");
+    case GetTorques: return QObject::tr("Get_Torques");
+    case GetControllerError: return QObject::tr("Get_Controller_Error");
+    case GetPowers: return QObject::tr("Get_Powers");
+    default: return QObject::tr("Unknown");
+    }
+}
+```
+
+### 4. 更新 expectedReplyLength 函数（在 odrivemotorcontroller.cpp 中）
+
+需要将现有的 expectedReplyLength 函数替换为：
+
+```cpp
+int ODriveMotorController::expectedReplyLength(CommandId commandId)
+{
+    switch (commandId) {
+    case Heartbeat: return 7;
+    case GetMotorError: return 8;
+    case GetEncoderError: return 4;
+    case GetSensorlessError: return 4;
+    case GetError:
+    case GetEncoderEstimates:
+    case GetEncoderCount:
+    case GetIq:
+    case GetSensorlessEstimates:
+    case GetTemperature:
+    case GetBusVoltageCurrent:
+    case GetTorques:
+    case GetPowers: return 8;
+    case GetControllerError: return 4;
+    default: return 0;
+    }
+}
+```
+
+### 5. 在 odrivemotorcontroller.h 的 public 部分添加新函数声明
+
+在现有的 public 函数后面添加：
+
+```cpp
+    // 轨迹控制
+    bool setTrajVelLimit(float limit);
+    bool setTrajVelLimit(quint8 nodeId, float limit);
+    bool setTrajAccelLimits(float accel, float decel);
+    bool setTrajAccelLimits(quint8 nodeId, float accel, float decel);
+    bool setTrajInertia(float inertia);
+    bool setTrajInertia(quint8 nodeId, float inertia);
+
+    // 增益控制
+    bool setPositionGain(float gain);
+    bool setPositionGain(quint8 nodeId, float gain);
+    bool setVelGains(float gain, float integratorGain);
+    bool setVelGains(quint8 nodeId, float gain, float integratorGain);
+
+    // 其他控制
+    bool startAnticogging();
+    bool startAnticogging(quint8 nodeId);
+    bool rebootODrive();
+    bool rebootODrive(quint8 nodeId);
+    bool setLinearCount(qint32 count);
+    bool setLinearCount(quint8 nodeId, qint32 count);
+```
+
+### 6. 在 odrivemotorcontroller.cpp 末尾添加新函数实现
+
+在文件末尾的 readFloat 函数后面添加：
+
+```cpp
+// 轨迹控制函数
+bool ODriveMotorController::setTrajVelLimit(float limit) { return setTrajVelLimit(m_nodeId, limit); }
+bool ODriveMotorController::setTrajVelLimit(quint8 nodeId, float limit)
+{
+    QByteArray payload;
+    appendFloat(payload, limit);
+    return sendFrame(nodeId, SetTrajVelLimit, payload);
+}
+
+bool ODriveMotorController::setTrajAccelLimits(float accel, float decel) { return setTrajAccelLimits(m_nodeId, accel, decel); }
+bool ODriveMotorController::setTrajAccelLimits(quint8 nodeId, float accel, float decel)
+{
+    QByteArray payload;
+    appendFloat(payload, accel);
+    appendFloat(payload, decel);
+    return sendFrame(nodeId, SetTrajAccelLimits, payload);
+}
+
+bool ODriveMotorController::setTrajInertia(float inertia) { return setTrajInertia(m_nodeId, inertia); }
+bool ODriveMotorController::setTrajInertia(quint8 nodeId, float inertia)
+{
+    QByteArray payload;
+    appendFloat(payload, inertia);
+    return sendFrame(nodeId, SetTrajInertia, payload);
+}
+
+// 增益控制函数
+bool ODriveMotorController::setPositionGain(float gain) { return setPositionGain(m_nodeId, gain); }
+bool ODriveMotorController::setPositionGain(quint8 nodeId, float gain)
+{
+    QByteArray payload;
+    appendFloat(payload, gain);
+    return sendFrame(nodeId, SetPositionGain, payload);
+}
+
+bool ODriveMotorController::setVelGains(float gain, float integratorGain) { return setVelGains(m_nodeId, gain, integratorGain); }
+bool ODriveMotorController::setVelGains(quint8 nodeId, float gain, float integratorGain)
+{
+    QByteArray payload;
+    appendFloat(payload, gain);
+    appendFloat(payload, integratorGain);
+    return sendFrame(nodeId, SetVelGains, payload);
+}
+
+// 其他控制函数
+bool ODriveMotorController::startAnticogging() { return startAnticogging(m_nodeId); }
+bool ODriveMotorController::startAnticogging(quint8 nodeId)
+{
+    return sendFrame(nodeId, StartAnticogging, QByteArray());
+}
+
+bool ODriveMotorController::rebootODrive() { return rebootODrive(m_nodeId); }
+bool ODriveMotorController::rebootODrive(quint8 nodeId)
+{
+    return sendFrame(nodeId, RebootODrive, QByteArray());
+}
+
+bool ODriveMotorController::setLinearCount(qint32 count) { return setLinearCount(m_nodeId, count); }
+bool ODriveMotorController::setLinearCount(quint8 nodeId, qint32 count)
+{
+    QByteArray payload;
+    appendUInt32(payload, static_cast<quint32>(count));
+    return sendFrame(nodeId, SetLinearCount, payload);
+}
+```
+
+## 编译测试
+
+完成以上修改后，运行：
+```
+cd d:\dev\odriveCar
+build.bat
+```
+
+## 下一步：UI更新
+
+后端功能完成后，需要更新UI以显示新的状态信息。这将在 mainwindow.h 和 mainwindow.cpp 中完成。

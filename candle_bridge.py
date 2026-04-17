@@ -75,20 +75,59 @@ class CandleDevice:
 
         self.dev = matches[channel_index]
 
+        # 改进的设备初始化流程
         try:
-            self.dev.set_configuration()
-        except usb.core.USBError:
-            pass
-
-        cfg = self.dev.get_active_configuration()
-        intf = cfg[(0, 0)]
-        try:
+            # 先尝试分离内核驱动
             if self.dev.is_kernel_driver_active(0):
-                self.dev.detach_kernel_driver(0)
+                try:
+                    self.dev.detach_kernel_driver(0)
+                    time.sleep(0.1)
+                except (NotImplementedError, usb.core.USBError):
+                    pass
         except (NotImplementedError, usb.core.USBError):
             pass
 
-        usb.util.claim_interface(self.dev, intf.bInterfaceNumber)
+        # 重置设备
+        try:
+            self.dev.reset()
+            time.sleep(0.5)  # 增加等待时间，确保设备完全重置
+        except usb.core.USBError as e:
+            # 如果重置失败，尝试继续
+            emit("log", message=f"Device reset warning: {e}")
+
+        # 设置配置
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                self.dev.set_configuration()
+                time.sleep(0.1)
+                break
+            except usb.core.USBError as e:
+                if attempt == max_retries - 1:
+                    raise RuntimeError(f"Failed to set USB configuration after {max_retries} attempts: {e}")
+                time.sleep(0.2)
+
+        cfg = self.dev.get_active_configuration()
+        intf = cfg[(0, 0)]
+
+        # 释放可能存在的占用
+        try:
+            usb.util.release_interface(self.dev, intf.bInterfaceNumber)
+            time.sleep(0.1)
+        except usb.core.USBError:
+            pass
+
+        # 声明接口
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                usb.util.claim_interface(self.dev, intf.bInterfaceNumber)
+                time.sleep(0.1)
+                break
+            except usb.core.USBError as e:
+                if attempt == max_retries - 1:
+                    raise RuntimeError(f"Failed to claim USB interface after {max_retries} attempts: {e}")
+                time.sleep(0.2)
 
         endpoints = list(intf.endpoints())
         for endpoint in endpoints:
@@ -97,8 +136,25 @@ class CandleDevice:
             else:
                 self.out_ep = endpoint.bEndpointAddress
 
-        self.ctrl_out(GS_USB_BREQ_HOST_FORMAT, struct.pack("<I", 0x0000BEEF))
-        self.ctrl_out(GS_USB_BREQ_MODE, struct.pack("<2I", GS_CAN_MODE_RESET, 0))
+        # 发送控制命令时增加重试机制
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                self.ctrl_out(GS_USB_BREQ_HOST_FORMAT, struct.pack("<I", 0x0000BEEF))
+                break
+            except usb.core.USBError as e:
+                if attempt == max_retries - 1:
+                    raise RuntimeError(f"Failed to set host format after {max_retries} attempts: {e}")
+                time.sleep(0.3)
+        
+        for attempt in range(max_retries):
+            try:
+                self.ctrl_out(GS_USB_BREQ_MODE, struct.pack("<2I", GS_CAN_MODE_RESET, 0))
+                break
+            except usb.core.USBError as e:
+                if attempt == max_retries - 1:
+                    raise RuntimeError(f"Failed to reset CAN mode after {max_retries} attempts: {e}")
+                time.sleep(0.3)
 
         timing = BITRATES.get(self.bitrate)
         if timing is None:
@@ -125,7 +181,15 @@ class CandleDevice:
         self.dev = None
 
     def ctrl_out(self, request, data):
-        return self.dev.ctrl_transfer(0x41, request, 0, 0, data, timeout=1000)
+        # 增加超时时间并添加重试逻辑
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                return self.dev.ctrl_transfer(0x41, request, 0, 0, data, timeout=2000)
+            except usb.core.USBError as e:
+                if attempt == max_retries - 1:
+                    raise
+                time.sleep(0.2)
 
     def send(self, frame_id, data_hex, remote=False, extended=False):
         data = bytes.fromhex(data_hex) if data_hex else b""
@@ -168,34 +232,40 @@ def main():
     try:
         candle.open()
     except Exception as exc:
-        emit("error", message=str(exc))
+        import traceback
+        emit("error", message=f"{type(exc).__name__}: {str(exc)}")
+        emit("log", message=f"Traceback: {traceback.format_exc()}")
         return 1
 
     emit("ready", channel=args.channel, bitrate=args.bitrate)
 
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError as exc:
-            emit("error", message=f"Invalid JSON command: {exc}")
-            continue
-
-        cmd = obj.get("cmd")
-        if cmd == "stop":
-            break
-        if cmd == "send":
+    try:
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
             try:
-                candle.send(int(obj.get("id", 0)),
-                            obj.get("data", ""),
-                            bool(obj.get("remote", False)),
-                            bool(obj.get("extended", False)))
-            except Exception as exc:
-                emit("error", message=f"Send failed: {exc}")
-        else:
-            emit("log", message=f"Unknown command: {cmd}")
+                obj = json.loads(line)
+            except json.JSONDecodeError as exc:
+                emit("error", message=f"Invalid JSON command: {exc}")
+                continue
+
+            cmd = obj.get("cmd")
+            if cmd == "stop":
+                break
+            if cmd == "send":
+                try:
+                    candle.send(int(obj.get("id", 0)),
+                                obj.get("data", ""),
+                                bool(obj.get("remote", False)),
+                                bool(obj.get("extended", False)))
+                except Exception as exc:
+                    emit("error", message=f"Send failed: {exc}")
+            else:
+                emit("log", message=f"Unknown command: {cmd}")
+    except (BrokenPipeError, EOFError, OSError) as exc:
+        # 正常的管道关闭，不报错
+        pass
 
     candle.close()
     return 0
