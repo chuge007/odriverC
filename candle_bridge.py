@@ -45,6 +45,11 @@ BITRATES = {
 }
 
 
+def list_candle_interfaces():
+    matches = list(usb.core.find(idVendor=VID, idProduct=PID, backend=BACKEND, find_all=True) or [])
+    return [f"candle{i}" for i in range(len(matches))]
+
+
 class CandleDevice:
     def __init__(self, channel_name, bitrate):
         self.channel_name = channel_name
@@ -226,7 +231,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--channel", default="candle0")
     parser.add_argument("--bitrate", type=int, default=250000)
+    parser.add_argument("--list", action="store_true")
     args = parser.parse_args()
+
+    if args.list:
+        print(json.dumps({
+            "interfaces": list_candle_interfaces(),
+            "error": ""
+        }), flush=True)
+        return 0
 
     candle = CandleDevice(args.channel, args.bitrate)
     try:

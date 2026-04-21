@@ -25,6 +25,7 @@
 #include <QMap>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QPointer>
 #include <QProcess>
 #include <QPushButton>
 #include <QCheckBox>
@@ -411,7 +412,45 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow()
 {
     saveSettings();
+
+    m_waitingForTxResponse = false;
+    m_scanState = ScanState();
+
+    const QList<QTimer *> timers = {
+        m_txTimer,
+        m_txResponseTimer,
+        m_logFlushTimer,
+        m_rxFlushTimer,
+        m_statusUpdateTimer,
+        m_settingsSaveTimer
+    };
+    for (QTimer *timer : timers) {
+        if (timer) {
+            timer->stop();
+        }
+    }
+
+    disconnectAllBoards();
+
+    if (m_controller) {
+        disconnect(m_controller, nullptr, this, nullptr);
+        m_controller->disconnectDevice();
+    }
+
+    if (m_advancedDialog) {
+        m_advancedDialog->close();
+        delete m_advancedDialog;
+        m_advancedDialog = nullptr;
+    }
+
+    m_logEdit = nullptr;
+    m_rxEdit = nullptr;
+    m_txStatusLabel = nullptr;
+    m_programStatusLabel = nullptr;
+    m_linkStatusLabel = nullptr;
+
     delete ui;
+    ui = nullptr;
 }
 
 void MainWindow::refreshCanInterfaces()
@@ -421,7 +460,7 @@ void MainWindow::refreshCanInterfaces()
     QStringList interfaces;
 
     qInfo().noquote() << "Refreshing CAN interfaces. plugin=" << plugin
-                      << " configuredBoards=" << connectedInterfaceCount();
+                      << " configuredBoardRows=" << connectedInterfaceCount();
 
     if (plugin == QStringLiteral("systeccan") && !checkSystemCanDriver(&errorMessage)) {
         interfaces.clear();
@@ -474,63 +513,69 @@ void MainWindow::toggleConnection()
 
     const QList<int> boardIndices = configuredBoardIndices();
     if (boardIndices.isEmpty()) {
-        appendLog(QStringLiteral("No board interfaces are configured in Advanced."));
-        updateProgramStatus(QStringLiteral("No configured interfaces"));
+        appendLog(QStringLiteral("No board rows are configured in Advanced. Multiple boards may share the same CAN interface and are distinguished by Node ID."));
+        updateProgramStatus(QStringLiteral("No configured board rows"));
         return;
-    }
-
-    QStringList selectedInterfaces;
-    for (const int boardIndex : boardIndices) {
-        const QString interfaceName = boardInterfaceName(boardIndex);
-        if (interfaceName.isEmpty()) {
-            continue;
-        }
-        if (selectedInterfaces.contains(interfaceName)) {
-            appendLog(QStringLiteral("Duplicate interface selected: %1").arg(interfaceName));
-            updateProgramStatus(QStringLiteral("Duplicate interface selection"));
-            return;
-        }
-        selectedInterfaces << interfaceName;
     }
 
     bool anyConnected = false;
     const QString plugin = currentPluginId(m_pluginCombo);
+    QMap<QString, ODriveMotorController *> controllersByInterface;
+
     for (const int boardIndex : boardIndices) {
         const QString interfaceName = boardInterfaceName(boardIndex);
         if (interfaceName.isEmpty()) {
             continue;
         }
 
-        ODriveMotorController *controller = new ODriveMotorController(this);
-        connectBoardControllerSignals(boardIndex, controller);
-
         BoardRuntime &runtime = m_boardRuntimes[boardIndex];
-        runtime.controller = controller;
+        runtime.controller = nullptr;
         runtime.connected = false;
+        runtime.ownsController = false;
 
+        ODriveMotorController *controller = controllersByInterface.value(interfaceName, nullptr);
         const quint8 defaultNode = boardTurnNodeId(boardIndex);
-        qInfo().noquote() << "Connect requested. board=" << boardIndex
-                          << " plugin=" << plugin
-                          << " interface=" << interfaceName
-                          << " bitrate=" << m_bitrateSpin->value()
-                          << " defaultNode=" << int(defaultNode);
 
-        if (!controller->connectDevice(plugin,
-                                       interfaceName,
-                                       m_bitrateSpin->value(),
-                                       m_serialBaudSpin->value(),
-                                       defaultNode)) {
-            appendLog(QStringLiteral("%1 connect failed").arg(boardLogPrefix(boardIndex)));
-            controller->deleteLater();
-            runtime.controller = nullptr;
-            continue;
+        if (!controller) {
+            controller = new ODriveMotorController(this);
+            qInfo().noquote() << "Connect requested. board=" << boardIndex
+                              << " plugin=" << plugin
+                              << " interface=" << interfaceName
+                              << " bitrate=" << m_bitrateSpin->value()
+                              << " defaultNode=" << int(defaultNode);
+
+            if (!controller->connectDevice(plugin,
+                                           interfaceName,
+                                           m_bitrateSpin->value(),
+                                           m_serialBaudSpin->value(),
+                                           defaultNode)) {
+                appendLog(QStringLiteral("%1 connect failed").arg(boardLogPrefix(boardIndex)));
+                controller->deleteLater();
+                continue;
+            }
+
+            controllersByInterface.insert(interfaceName, controller);
+            runtime.ownsController = true;
+        } else {
+            qInfo().noquote() << "Reusing connected interface for board=" << boardIndex
+                              << " plugin=" << plugin
+                              << " interface=" << interfaceName
+                              << " defaultNode=" << int(defaultNode);
+            appendLog(QStringLiteral("%1 using shared interface %2 (distinguished by Node ID)")
+                      .arg(boardLogPrefix(boardIndex), interfaceName));
         }
 
+        runtime.controller = controller;
         runtime.connected = true;
+        connectBoardControllerSignals(boardIndex, controller);
         runtime.detectedNodes = m_boardConfigRows[boardIndex].detectedNodes;
+
+        QList<quint8> trackedNodeIds = controller->trackedNodeIds();
+        trackedNodeIds << boardTurnNodeId(boardIndex) << boardDriveNodeId(boardIndex);
         controller->setDefaultNodeId(defaultNode);
-        controller->setTrackedNodeIds({boardTurnNodeId(boardIndex), boardDriveNodeId(boardIndex)});
+        controller->setTrackedNodeIds(trackedNodeIds);
         controller->requestTrackedTelemetry();
+
         anyConnected = true;
         updateBoardStatusLabel(boardIndex, zh("e5b7b2e8bf9ee68ea5"));
         QTimer::singleShot(300, this, [this, boardIndex]() { refreshBoardNodes(boardIndex, false); });
@@ -711,9 +756,16 @@ void MainWindow::appendLog(const QString &message)
     m_lastLogMessage = message;
 
     const QString timestamp = QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"));
-    m_pendingLogLines.append(QStringLiteral("[%1] %2").arg(timestamp, message));
-    if (m_logFlushTimer && !m_logFlushTimer->isActive()) {
-        m_logFlushTimer->start();
+    const QString line = QStringLiteral("[%1] %2").arg(timestamp, message);
+
+    if (m_logFlushTimer) {
+        m_pendingLogLines.append(line);
+        if (!m_logFlushTimer->isActive()) {
+            m_logFlushTimer->start();
+        }
+    } else {
+        m_logEdit->appendPlainText(line);
+        writeConsoleLine(line);
     }
 }
 
@@ -989,10 +1041,16 @@ void MainWindow::updateDetectedNodesList()
     }
 
     const QList<quint8> activeNodes = m_boardConfigRows[boardIndex].detectedNodes;
+    const quint8 previousNodeId = comboNodeValue(m_debugNodeCombo, 0);
 
+    m_updatingDebugNodeCombo = true;
+    m_debugNodeCombo->blockSignals(true);
     m_debugNodeCombo->clear();
+
     if (activeNodes.isEmpty()) {
         m_debugNodeCombo->setEnabled(false);
+        m_debugNodeCombo->blockSignals(false);
+        m_updatingDebugNodeCombo = false;
         m_activeNodesLabel->setText(zh("e6a380e6b58be588b0e79a84e88a82e782b9320e697a0"));
         return;
     }
@@ -1008,27 +1066,48 @@ void MainWindow::updateDetectedNodesList()
         nodeStrings << QString::number(nodeId);
     }
     m_activeNodesLabel->setText(QStringLiteral("%1: %2").arg(zh("e6a380e6b58be588b0e79a84e88a82e782b9"), nodeStrings.join(", ")));
-    const int currentNodeIndex = m_debugNodeCombo->findData(currentDebugNodeId());
-    if (currentNodeIndex >= 0) {
-        m_debugNodeCombo->setCurrentIndex(currentNodeIndex);
-    } else if (!activeNodes.isEmpty()) {
-        m_debugNodeCombo->setCurrentIndex(0);
-        switchToDetectedNode(activeNodes.first());
+
+    int currentNodeIndex = m_debugNodeCombo->findData(previousNodeId);
+    if (currentNodeIndex < 0) {
+        currentNodeIndex = m_debugNodeCombo->findData(boardTurnNodeId(boardIndex));
     }
+    if (currentNodeIndex < 0) {
+        currentNodeIndex = 0;
+    }
+    m_debugNodeCombo->setCurrentIndex(currentNodeIndex);
+    m_debugNodeCombo->blockSignals(false);
+    m_updatingDebugNodeCombo = false;
 }
 
 void MainWindow::switchToDetectedNode(quint8 nodeId)
 {
-    if (m_debugNodeCombo) {
-        const int index = m_debugNodeCombo->findData(nodeId);
-        if (index >= 0 && m_debugNodeCombo->currentIndex() != index) {
-            m_debugNodeCombo->setCurrentIndex(index);
-        }
+    if (m_switchingDebugNode || m_updatingDebugNodeCombo || !m_debugNodeCombo) {
+        return;
     }
+
+    const int index = m_debugNodeCombo->findData(nodeId);
+    if (index < 0) {
+        return;
+    }
+
+    const quint8 previousNodeId = comboNodeValue(m_debugNodeCombo, 0);
+    m_switchingDebugNode = true;
+
+    if (m_debugNodeCombo->currentIndex() != index) {
+        m_debugNodeCombo->blockSignals(true);
+        m_debugNodeCombo->setCurrentIndex(index);
+        m_debugNodeCombo->blockSignals(false);
+    }
+
     updateDebugScaleSpin();
-    refreshTelemetry();
-    appendLog(QStringLiteral("%1 Node %2").arg(zh("e5b7b2e5887e68da2e588b0"), QString::number(nodeId)));
+
+    if (previousNodeId != nodeId) {
+        refreshTelemetry();
+        appendLog(QStringLiteral("%1 Node %2").arg(zh("e5b7b2e5887e68da2e588b0"), QString::number(nodeId)));
+    }
     updateProgramStatus(QStringLiteral("%1: %2").arg(zh("e5bd93e5898de68ea7e588b688a82e782b9"), QString::number(nodeId)));
+
+    m_switchingDebugNode = false;
 }
 
 void MainWindow::requestIdle()
@@ -1262,10 +1341,40 @@ void MainWindow::refreshTelemetry()
 void MainWindow::openAdvancedPanel()
 {
     if (!m_advancedDialog) {
+        appendLog(QStringLiteral("Advanced dialog is not initialized"));
         return;
     }
 
-    m_advancedDialog->show();
+    if (!m_advancedDialog->isVisible()) {
+        QRect targetGeometry = m_advancedDialog->geometry();
+        if (!targetGeometry.isValid() || targetGeometry.isEmpty()) {
+            targetGeometry = QRect(pos() + QPoint(40, 40), m_advancedDialog->size());
+        }
+
+        if (const QScreen *screen = QGuiApplication::screenAt(frameGeometry().center())) {
+            const QRect available = screen->availableGeometry();
+            const QSize dialogSize = m_advancedDialog->size();
+            QPoint topLeft = frameGeometry().topRight() + QPoint(16, 0);
+
+            if (topLeft.x() + dialogSize.width() > available.right()) {
+                topLeft.setX(qMax(available.left(), frameGeometry().left() - dialogSize.width() - 16));
+            }
+            if (topLeft.y() + dialogSize.height() > available.bottom()) {
+                topLeft.setY(qMax(available.top(), available.bottom() - dialogSize.height() + 1));
+            }
+            topLeft.setX(qMax(available.left(), topLeft.x()));
+            topLeft.setY(qMax(available.top(), topLeft.y()));
+            targetGeometry.moveTopLeft(topLeft);
+        }
+
+        m_advancedDialog->setGeometry(targetGeometry);
+    }
+
+    if (m_advancedDialog->isMinimized()) {
+        m_advancedDialog->showNormal();
+    } else {
+        m_advancedDialog->show();
+    }
     m_advancedDialog->raise();
     m_advancedDialog->activateWindow();
 }
@@ -1310,7 +1419,8 @@ void MainWindow::setZeroPoint()
 {
     const QList<int> boardIndices = connectedBoardIndices();
     if (boardIndices.isEmpty()) {
-        QMessageBox::warning(this, zh("e69caae8bf9ee68ea5"), zh("e8afb7e58588e8bf9ee68ea5204f4472697665e38082"));
+        appendLog(zh("e8afb7e58588e8bf9ee68ea5204f4472697665"));
+        updateProgramStatus(zh("e8afb7e58588e8bf9ee68ea5204f4472697665"));
         return;
     }
 
@@ -1380,30 +1490,74 @@ void MainWindow::enableAxes()
 {
     const QList<int> boardIndices = connectedBoardIndices();
     if (boardIndices.isEmpty()) {
+        appendLog(zh("e8afb7e58588e8bf9ee68ea5204f4472697665"));
+        updateProgramStatus(zh("e8afb7e58588e8bf9ee68ea5204f4472697665"));
         return;
     }
 
+    int enabledAxisCount = 0;
     for (const int boardIndex : boardIndices) {
-        ensureAxisClosedLoop(boardIndex, boardTurnNodeId(boardIndex));
-        ensureAxisClosedLoop(boardIndex, boardDriveNodeId(boardIndex));
+        ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
+        if (!controller || !controller->isConnected()) {
+            continue;
+        }
+
+        QList<quint8> nodeIds;
+        nodeIds << boardTurnNodeId(boardIndex);
+        const quint8 driveNodeId = boardDriveNodeId(boardIndex);
+        if (!nodeIds.contains(driveNodeId)) {
+            nodeIds << driveNodeId;
+        }
+
+        for (const quint8 nodeId : nodeIds) {
+            if (ensureAxisClosedLoop(boardIndex, nodeId)) {
+                ++enabledAxisCount;
+            }
+            controller->requestAllTelemetry(nodeId, false);
+        }
     }
-    updateProgramStatus(zh("e6898be58aa8e68ea7e588b6e5b7b2e5bc80e5a78b"));
+
+    QTimer::singleShot(350, this, [this, boardIndices]() {
+        for (const int boardIndex : boardIndices) {
+            ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
+            if (!controller || !controller->isConnected()) {
+                continue;
+            }
+
+            QList<quint8> nodeIds;
+            nodeIds << boardTurnNodeId(boardIndex);
+            const quint8 driveNodeId = boardDriveNodeId(boardIndex);
+            if (!nodeIds.contains(driveNodeId)) {
+                nodeIds << driveNodeId;
+            }
+
+            for (const quint8 nodeId : nodeIds) {
+                controller->requestAllTelemetry(nodeId, false);
+            }
+        }
+    });
+
+    const QString statusMessage = enabledAxisCount > 0
+            ? zh("e5b7b2e58f91e98081e585a8e983a8e794b5e69cbae4bdbfe883bd")
+            : zh("e4bdbfe883bde5a4b1e8b4a5");
+    appendLog(statusMessage);
+    updateProgramStatus(statusMessage);
 }
 
 void MainWindow::startScanProgram()
 {
     const QList<int> boardIndices = connectedBoardIndices();
     if (boardIndices.isEmpty()) {
-        QMessageBox::warning(this, zh("e69caae8bf9ee68ea5"), zh("e8afb7e58588e8bf9ee68ea5204f4472697665e38082"));
+        appendLog(zh("e8afb7e58588e8bf9ee68ea5204f4472697665"));
+        updateProgramStatus(zh("e8afb7e58588e8bf9ee68ea5204f4472697665"));
         return;
     }
 
     if (m_scanAxisLengthSpin->value() <= 0.0
             || m_scanSpeedSpin->value() <= 0.0
             || m_stepLengthSpin->value() <= 0.0) {
-        QMessageBox::warning(this,
-                             zh("e58f82e695b0e697a0e69588"),
-                             zh("e689abe68f8fe8bdb4e995bfe38081e689abe68f8fe9809fe5baa6e38081e6ada5e8bf9be995bfe5baa6e983bde5bf85e9a1bbe5a4a7e4ba8e2030e38082"));
+        appendLog(zh("e58f82e695b0e697a0e69588efbc9ae689abe68f8fe8bdb4e995bfe38081e689abe68f8fe9809fe5baa6e38081e6ada5e8bf9be995bfe5baa6e983bde5bf85e9a1bbe5a4a7e4ba8e2030"));
+        updateProgramStatus(zh("e58f82e695b0e697a0e69588"));
         return;
     }
 
@@ -1611,7 +1765,7 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
     leftLayout->addWidget(m_setZeroButton, 4, 0, 1, 2);
     leftLayout->addWidget(new QLabel(zh("e59b9ee58e9fe782b9e9809fe5baa63a")), 5, 0);
     leftLayout->addWidget(m_homeSpeedSpin, 5, 1, 1, 2);
-    leftLayout->addWidget(new QLabel(zh("e782b9e58aa8e9809fe5baa63a")), 6, 0);
+    leftLayout->addWidget(new QLabel(zh("e8a18ce9a9b6e9809fe5baa63a")), 6, 0);
     leftLayout->addWidget(m_jogSpeedSpin, 6, 1, 1, 2);
     leftLayout->setRowStretch(7, 1);
 
@@ -1626,7 +1780,7 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
     m_backwardButton = new QPushButton(zh("e5908ee98080"), centerPanel);
     m_leftButton = new QPushButton(zh("e5b7a6e8bdac"), centerPanel);
     m_rightButton = new QPushButton(zh("e58fb3e8bdac"), centerPanel);
-    m_enableButton = new QPushButton(zh("e5bc80e5a78b"), centerPanel);
+    m_enableButton = new QPushButton(zh("e4bdbfe883bd"), centerPanel);
 
     const QList<QPushButton *> directionButtons = {m_forwardButton, m_backwardButton, m_leftButton, m_rightButton, m_enableButton};
     for (QPushButton *button : directionButtons) {
@@ -1779,32 +1933,42 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
                 updateProgramStatus(zh("e6898be58aa8e782b9e58aa8e5b7b2e4b8ade6ada2e887aae58aa8e689abe68f8f"));
             }
 
-            // 同步控制：收集所有命令，然后同时发送
+            const double targetSpeed = direction * qMax(0.1, m_jogSpeedSpin->value());
             int successCount = 0;
             int failCount = 0;
             QStringList statusList;
-            
+
             for (const int boardIndex : boardIndices) {
                 const quint8 nodeId = turnAxis ? boardTurnNodeId(boardIndex) : boardDriveNodeId(boardIndex);
-                bool success = commandAxisVelocity(boardIndex,
-                                    nodeId,
-                                    direction * qMax(0.1, m_jogSpeedSpin->value()),
-                                    turnAxis);
+                const QString axisKey = motionAxisKey(boardIndex, nodeId, turnAxis);
+
+                if (axisHasActiveErrors(boardIndex, nodeId)) {
+                    logMotionIssueOnce(axisKey + QStringLiteral("/errors"),
+                                       QStringLiteral("%1 Node %2 has active errors, jog ignored")
+                                       .arg(boardLogPrefix(boardIndex))
+                                       .arg(nodeId));
+                    ++failCount;
+                    statusList << QStringLiteral("%1:ERR").arg(boardDisplayName(boardIndex));
+                    continue;
+                }
+
+                const bool success = commandAxisVelocity(boardIndex, nodeId, targetSpeed, turnAxis);
                 if (success) {
-                    successCount++;
-                    statusList << QString("%1:OK").arg(boardDisplayName(boardIndex));
+                    ++successCount;
+                    statusList << QStringLiteral("%1:OK").arg(boardDisplayName(boardIndex));
                 } else {
-                    failCount++;
-                    statusList << QString("%1:FAIL").arg(boardDisplayName(boardIndex));
+                    ++failCount;
+                    statusList << QStringLiteral("%1:FAIL").arg(boardDisplayName(boardIndex));
                 }
             }
-            
-            // 显示同步状态
-            QString syncStatus = QString(zh("e5908ce6ada5") + " %1/%2 " + zh("e68890e58a9f")).arg(successCount).arg(boardIndices.size());
+
+            QString syncStatus = QString(zh("e5908ce6ada5") + " %1/%2 " + zh("e68890e58a9f"))
+                    .arg(successCount)
+                    .arg(boardIndices.size());
             if (failCount > 0) {
-                syncStatus += QString(" [%1" + zh("e5a4b1e8b4a5") + "]").arg(failCount);
+                syncStatus += QStringLiteral(" [%1").arg(failCount) + zh("e5a4b1e8b4a5") + QStringLiteral("]");
             }
-            updateProgramStatus(syncStatus + " - " + statusList.join(" "));
+            updateProgramStatus(syncStatus + QStringLiteral(" - ") + statusList.join(QStringLiteral(" ")));
         });
 
         connect(button, &QPushButton::released, this, [this, turnAxis]() {
@@ -1813,33 +1977,36 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
                 return;
             }
 
-            // 同步停止所有轮子
             int stopCount = 0;
             for (const int boardIndex : boardIndices) {
                 const quint8 nodeId = turnAxis ? boardTurnNodeId(boardIndex) : boardDriveNodeId(boardIndex);
-                if (commandAxisVelocity(boardIndex, nodeId, 0.0, turnAxis)) {
-                    stopCount++;
+                if (stopAxisVelocity(boardIndex, nodeId)) {
+                    ++stopCount;
                 }
             }
             updateProgramStatus(QString(zh("e5819ce6ada2") + " %1/%2").arg(stopCount).arg(boardIndices.size()));
         });
     };
 
-    connectJogButton(m_forwardButton, false, 1.0);
-    connectJogButton(m_backwardButton, false, -1.0);
-    connectJogButton(m_leftButton, true, -1.0);
-    connectJogButton(m_rightButton, true, 1.0);
+    // 前进后退控制驱动轮（drive，turnAxis=false），左右转控制转向轮（turn，turnAxis=true）
+    connectJogButton(m_forwardButton, false, 1.0);   // 驱动轮正向
+    connectJogButton(m_backwardButton, false, -1.0); // 驱动轮反向
+    connectJogButton(m_leftButton, true, -1.0);      // 转向轮左转
+    connectJogButton(m_rightButton, true, 1.0);      // 转向轮右转
 }
 
 void MainWindow::buildAdvancedDialog()
 {
-    m_advancedDialog = new QDialog(this);
+    m_advancedDialog = new QDialog(nullptr, Qt::Window);
+    m_advancedDialog->setAttribute(Qt::WA_DeleteOnClose, false);
     m_advancedDialog->setWindowTitle(zh("e9ab98e7baa7e99da2e69dbf"));
     const QRect availableGeometry = QGuiApplication::primaryScreen()
             ? QGuiApplication::primaryScreen()->availableGeometry()
             : QRect(0, 0, 1280, 900);
     m_advancedDialog->resize(qMax(900, int(availableGeometry.width() * 0.9)),
                              qMax(650, int(availableGeometry.height() * 0.88)));
+    m_advancedDialog->move(availableGeometry.center() - QPoint(m_advancedDialog->width() / 2,
+                                                               m_advancedDialog->height() / 2));
 
     QVBoxLayout *dialogLayout = new QVBoxLayout(m_advancedDialog);
     dialogLayout->setContentsMargins(8, 8, 8, 8);
@@ -2097,10 +2264,11 @@ void MainWindow::buildAdvancedDialog()
     });
     connect(m_debugNodeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int index) {
-        if (index >= 0 && m_debugNodeCombo->count() > 0) {
-            const quint8 nodeId = m_debugNodeCombo->currentData().toUInt();
-            switchToDetectedNode(nodeId);
+        if (m_updatingDebugNodeCombo || m_switchingDebugNode || index < 0 || m_debugNodeCombo->count() <= 0) {
+            return;
         }
+        const quint8 nodeId = m_debugNodeCombo->currentData().toUInt();
+        switchToDetectedNode(nodeId);
     });
     connect(m_debugScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, [this](double value) {
@@ -2485,9 +2653,18 @@ void MainWindow::runDiagnoseFix()
 
     const int boardIndex = currentDebugBoardIndex();
     const quint8 nodeId = currentDebugNodeId();
+    QPointer<ODriveMotorController> controllerGuard(controller);
     controller->requestAllTelemetry(nodeId, false);
 
-    QTimer::singleShot(250, this, [this, controller, boardIndex, nodeId]() {
+    QTimer::singleShot(250, this, [this, controllerGuard, boardIndex, nodeId]() {
+        if (!controllerGuard || !controllerGuard->isConnected()) {
+            appendLog(QStringLiteral("%1 Node %2 diagnose cancelled: controller no longer available")
+                      .arg(boardDisplayName(boardIndex))
+                      .arg(nodeId));
+            return;
+        }
+
+        ODriveMotorController *controller = controllerGuard.data();
         const ODriveMotorController::AxisStatus &status = controller->status(nodeId);
 
         auto hex32 = [](quint32 value) {
@@ -2782,73 +2959,196 @@ void MainWindow::runDiagnoseFix()
         if (criticalCount > 0 || warningCount > 0) {
             appendLog(QStringLiteral("========== %1 ==========").arg(zh("e5bc80e5a78be887aae58aa8e4bfaee5a48d")));
             
-            QTimer::singleShot(500, this, [this, controller, nodeId, status]() {
-                // 1. 清除错误
-                if (status.axisError != 0 || status.activeErrors != 0 || status.motorError != 0 
+            QTimer::singleShot(500, this, [this, controllerGuard, nodeId, status, criticalCount, warningCount]() {
+                if (!controllerGuard || !controllerGuard->isConnected()) {
+                    appendLog(QStringLiteral("Diagnose auto-fix cancelled for node %1: controller unavailable").arg(nodeId));
+                    return;
+                }
+
+                ODriveMotorController *controller = controllerGuard.data();
+
+                // 步骤1：清除错误
+                if (status.axisError != 0 || status.activeErrors != 0 || status.motorError != 0
                     || status.encoderError != 0 || status.controllerError != 0) {
                     appendLog(zh("e6ada5e9aaa431efbc9ae6b885e999a4e99499e8afaf"));
                     controller->clearErrors(nodeId, false);
                 }
-                
-                QTimer::singleShot(500, this, [this, controller, nodeId, status]() {
-                    // 2. 检查并修复速度限制
+
+                QTimer::singleShot(800, this, [this, controllerGuard, nodeId, status, criticalCount, warningCount]() {
+                    if (!controllerGuard || !controllerGuard->isConnected()) {
+                        appendLog(QStringLiteral("Diagnose auto-fix cancelled for node %1: controller unavailable").arg(nodeId));
+                        return;
+                    }
+
+                    ODriveMotorController *controller = controllerGuard.data();
+
+                    // 步骤2：检查并修复速度限制
+                    bool needsLimitFix = false;
+                    float safeVelLimit = status.currentVelocityLimit;
+                    float safeCurrentLimit = status.currentCurrentLimit;
+                    
                     if (status.currentVelocityLimit <= 0.0f || status.currentVelocityLimit > 20.0f) {
                         appendLog(zh("e6ada5e9aaa432efbc9ae8aebee7bdaee9809fe5baa6e99990e588b6"));
-                        const float safeVelLimit = (nodeId == 0) ? 5.0f : 20.0f;
-                        controller->setLimits(nodeId, safeVelLimit, qMax(10.0f, status.currentCurrentLimit));
+                        safeVelLimit = (nodeId == 0) ? 5.0f : 20.0f;
+                        needsLimitFix = true;
                     }
                     
-                    // 3. 检查并修复电流限制
+                    // 步骤3：检查并修复电流限制
                     if (status.currentCurrentLimit <= 0.0f) {
                         appendLog(zh("e6ada5e9aaa433efbc9ae8aebee7bdaee794b5e6b581e99990e588b6"));
-                        controller->setLimits(nodeId, qMax(5.0f, status.currentVelocityLimit), 10.0f);
+                        safeCurrentLimit = 10.0f;
+                        needsLimitFix = true;
                     }
                     
-                    QTimer::singleShot(500, this, [this, controller, nodeId, status]() {
-                        // 4. 如果有INVALID_STATE错误，尝试重新进入闭环
-                        if (status.axisError & 0x00000001u) {
-                            appendLog(zh("e6ada5e9aaa434efbc9ae4bfaee5a48d494e56414c49445f5354415445e99499e8afaf"));
-                            controller->requestIdle(nodeId);
+                    if (needsLimitFix) {
+                        controller->setLimits(nodeId, safeVelLimit, safeCurrentLimit);
+                    }
+                    
+                    QTimer::singleShot(800, this, [this, controllerGuard, nodeId, status, criticalCount, warningCount]() {
+                        if (!controllerGuard || !controllerGuard->isConnected()) {
+                            appendLog(QStringLiteral("Diagnose auto-fix cancelled for node %1: controller unavailable").arg(nodeId));
+                            return;
+                        }
+
+                        ODriveMotorController *controller = controllerGuard.data();
+
+                        // 重新读取状态
+                        controller->requestAllTelemetry(nodeId, false);
+
+                        QTimer::singleShot(500, this, [this, controllerGuard, nodeId, status, criticalCount, warningCount]() {
+                            if (!controllerGuard || !controllerGuard->isConnected()) {
+                                appendLog(QStringLiteral("Diagnose auto-fix cancelled for node %1: controller unavailable").arg(nodeId));
+                                return;
+                            }
+
+                            ODriveMotorController *controller = controllerGuard.data();
+                            const ODriveMotorController::AxisStatus &currentStatus = controller->status(nodeId);
                             
-                            QTimer::singleShot(1000, this, [this, controller, nodeId]() {
-                                controller->clearErrors(nodeId, false);
+                            // 步骤4：检查是否需要校准
+                            if (status.axisError & 0x00000001u) {
+                                // INVALID_STATE错误，可能需要重新校准
+                                appendLog(zh("e6ada5e9aaa434efbc9ae6a380e6b58be588b0494e56414c49445f5354415445e99499e8afafefbc8ce5b09de8af95e58588e8bf9be585a5e7a9bae997b2"));
+                                controller->requestIdle(nodeId);
                                 
-                                QTimer::singleShot(500, this, [this, controller, nodeId]() {
-                                    appendLog(zh("e5b09de8af95e9878de696b0e8bf9be585a5e997ade78eaf"));
-                                    controller->requestClosedLoop(nodeId);
-                                    
-                                    QTimer::singleShot(1000, this, [this, controller, nodeId]() {
+                                QTimer::singleShot(1000, this, [this, controllerGuard, nodeId]() {
+                                    if (!controllerGuard || !controllerGuard->isConnected()) {
+                                        appendLog(QStringLiteral("Diagnose auto-fix cancelled for node %1: controller unavailable").arg(nodeId));
+                                        return;
+                                    }
+
+                                    ODriveMotorController *controller = controllerGuard.data();
+                                    controller->clearErrors(nodeId, false);
+
+                                    QTimer::singleShot(800, this, [this, controllerGuard, nodeId]() {
+                                        if (!controllerGuard || !controllerGuard->isConnected()) {
+                                            appendLog(QStringLiteral("Diagnose auto-fix cancelled for node %1: controller unavailable").arg(nodeId));
+                                            return;
+                                        }
+
+                                        ODriveMotorController *controller = controllerGuard.data();
+
+                                        // 检查是否已校准
+                                        controller->requestAllTelemetry(nodeId, false);
+
+                                        QTimer::singleShot(500, this, [this, controllerGuard, nodeId]() {
+                                            if (!controllerGuard || !controllerGuard->isConnected()) {
+                                                appendLog(QStringLiteral("Diagnose auto-fix cancelled for node %1: controller unavailable").arg(nodeId));
+                                                return;
+                                            }
+
+                                            ODriveMotorController *controller = controllerGuard.data();
+                                            const ODriveMotorController::AxisStatus &checkStatus = controller->status(nodeId);
+                                            
+                                            // 如果编码器未就绪或电机未校准，需要完整校准
+                                            if (checkStatus.encoderError != 0 || checkStatus.motorError != 0) {
+                                                appendLog(zh("e6ada5e9aaa435efbc9ae6a380e6b58be588b0e7bc96e7a081e599a8e68896e794b5e69cbae99499e8afafefbc8ce68980e4bba5e99c80e8a681e5ae8ce695b4e6a0a1e58786"));
+                                                appendLog(zh("e8afb7e6898be58aa8e8bf90e8a18ce3808ae695b4e69cbae5889de5a78be58c96e3808be68c89e992ae"));
+                                                appendLog(QStringLiteral("========== %1 ==========").arg(zh("e4bfaee5a48de5ae8ce68890")));
+                                                updateStatusPanel();
+                                                return;
+                                            }
+                                            
+                                            appendLog(zh("e6ada5e9aaa435efbc9ae5b09de8af95e8bf9be585a5e997ade78eaf"));
+                                            controller->requestClosedLoop(nodeId);
+                                            
+                                            QTimer::singleShot(1500, this, [this, controllerGuard, nodeId]() {
+                                                if (!controllerGuard || !controllerGuard->isConnected()) {
+                                                    appendLog(QStringLiteral("Diagnose auto-fix cancelled for node %1: controller unavailable").arg(nodeId));
+                                                    return;
+                                                }
+
+                                                ODriveMotorController *controller = controllerGuard.data();
+                                                controller->requestAllTelemetry(nodeId, false);
+                                                QTimer::singleShot(300, this, [this, controllerGuard, nodeId]() {
+                                                    if (!controllerGuard || !controllerGuard->isConnected()) {
+                                                        appendLog(QStringLiteral("Diagnose auto-fix cancelled for node %1: controller unavailable").arg(nodeId));
+                                                        return;
+                                                    }
+
+                                                    ODriveMotorController *controller = controllerGuard.data();
+                                                    const ODriveMotorController::AxisStatus &finalStatus = controller->status(nodeId);
+                                                    if (finalStatus.axisError == 0 && finalStatus.axisState == 8) {
+                                                        appendLog(zh("e4bfaee5a48de68890e58a9fefbc8ce794b5e69cbae5b7b2e8bf9be585a5e997ade78eaf"));
+                                                    } else {
+                                                        appendLog(zh("e4bfaee5a48de983a8e58886e68890e58a9fefbc8ce4bd86e4bb8de69c89e5bc82e5b8b8efbc8ce8afb7e6898be58aa8e8bf90e8a18ce3808ae695b4e69cbae5889de5a78be58c96e3808be68c89e992ae"));
+                                                    }
+                                                    appendLog(QStringLiteral("========== %1 ==========").arg(zh("e4bfaee5a48de5ae8ce68890")));
+                                                    updateStatusPanel();
+                                                });
+                                            });
+                                        });
+                                    });
+                                });
+                            } else if (currentStatus.axisState != ODriveMotorController::ClosedLoopControl) {
+                                // 步骤5：如果不在闭环状态，尝试进入闭环
+                                appendLog(zh("e6ada5e9aaa435efbc9ae5b09de8af95e8bf9be585a5e997ade78eaf"));
+                                controller->requestClosedLoop(nodeId);
+                                
+                                QTimer::singleShot(1500, this, [this, controllerGuard, nodeId, criticalCount]() {
+                                    if (!controllerGuard || !controllerGuard->isConnected()) {
+                                        appendLog(QStringLiteral("Diagnose auto-fix cancelled for node %1: controller unavailable").arg(nodeId));
+                                        return;
+                                    }
+
+                                    ODriveMotorController *controller = controllerGuard.data();
+                                    controller->requestAllTelemetry(nodeId, false);
+                                    QTimer::singleShot(300, this, [this, controllerGuard, nodeId, criticalCount]() {
+                                        if (!controllerGuard || !controllerGuard->isConnected()) {
+                                            appendLog(QStringLiteral("Diagnose auto-fix cancelled for node %1: controller unavailable").arg(nodeId));
+                                            return;
+                                        }
+
+                                        ODriveMotorController *controller = controllerGuard.data();
                                         const ODriveMotorController::AxisStatus &finalStatus = controller->status(nodeId);
-                                        if (finalStatus.axisError == 0 && finalStatus.axisState == 8) {
+                                        
+                                        // 判断修复是否成功
+                                        bool hasErrors = (finalStatus.axisError != 0 || finalStatus.motorError != 0 
+                                                         || finalStatus.encoderError != 0 || finalStatus.controllerError != 0);
+                                        bool inClosedLoop = (finalStatus.axisState == 8);
+                                        
+                                        if (!hasErrors && inClosedLoop) {
                                             appendLog(zh("e4bfaee5a48de68890e58a9fefbc8ce794b5e69cbae5b7b2e8bf9be585a5e997ade78eaf"));
+                                        } else if (!hasErrors && !inClosedLoop) {
+                                            // 无错误但未在闭环 - 这是正常的，可能只是在空闲状态
+                                            if (criticalCount == 0) {
+                                                appendLog(zh("e4bfaee5a48de68890e58a9fefbc8ce99499e8afafe5b7b2e6b885e999a4efbc8ce78ab6e68081e6ada3e5b8b8"));
+                                            } else {
+                                                appendLog(zh("e4bfaee5a48de983a8e58886e68890e58a9fefbc8ce4bd86e69caae8bf9be585a5e997ade78eafefbc8ce8afb7e6898be58aa8e782b9e587bbe3808ae5bc80e5a78be3808be68c89e992ae"));
+                                            }
                                         } else {
-                                            appendLog(zh("e4bfaee5a48de5a4b1e8b4a5efbc8ce8afb7e6a380e69fa5e7a1ace4bbb6e8bf9ee68ea5e68896e9858de7bdae"));
+                                            appendLog(zh("e4bfaee5a48de983a8e58886e68890e58a9fefbc8ce4bd86e4bb8de69c89e5bc82e5b8b8efbc8ce8afb7e6898be58aa8e8bf90e8a18ce3808ae695b4e69cbae5889de5a78be58c96e3808be68c89e992ae"));
                                         }
                                         appendLog(QStringLiteral("========== %1 ==========").arg(zh("e4bfaee5a48de5ae8ce68890")));
                                         updateStatusPanel();
                                     });
                                 });
-                            });
-                        } else if (status.axisState != ODriveMotorController::ClosedLoopControl) {
-                            // 5. 如果不在闭环状态，尝试进入闭环
-                            appendLog(zh("e6ada5e9aaa435efbc9ae5b09de8af95e8bf9be585a5e997ade78eaf"));
-                            controller->requestClosedLoop(nodeId);
-                            
-                            QTimer::singleShot(1000, this, [this, controller, nodeId]() {
-                                const ODriveMotorController::AxisStatus &finalStatus = controller->status(nodeId);
-                                if (finalStatus.axisError == 0 && finalStatus.axisState == 8) {
-                                    appendLog(zh("e4bfaee5a48de68890e58a9fefbc8ce794b5e69cbae5b7b2e8bf9be585a5e997ade78eaf"));
-                                } else {
-                                    appendLog(zh("e4bfaee5a48de983a8e58886e68890e58a9fefbc8ce4bd86e4bb8de69c89e5bc82e5b8b8"));
-                                }
+                            } else {
+                                // 已经在闭环且无严重错误
+                                appendLog(zh("e4bfaee5a48de68890e58a9fefbc8ce78ab6e68081e6ada3e5b8b8"));
                                 appendLog(QStringLiteral("========== %1 ==========").arg(zh("e4bfaee5a48de5ae8ce68890")));
                                 updateStatusPanel();
-                            });
-                        } else {
-                            appendLog(zh("e697a0e99c80e8bf9be4b880e6ada5e4bfaee5a48defbc8ce78ab6e68081e6ada3e5b8b8"));
-                            appendLog(QStringLiteral("========== %1 ==========").arg(zh("e4bfaee5a48de5ae8ce68890")));
-                            updateStatusPanel();
-                        }
+                            }
+                        });
                     });
                 });
             });
@@ -2866,58 +3166,150 @@ void MainWindow::initializeMachine()
     }
 
     const quint8 nodeId = currentDebugNodeId();
+    QPointer<ODriveMotorController> controllerGuard(controller);
     appendLog(QStringLiteral("========== %1 ==========").arg(zh("e5bc80e5a78be695b4e69cbae5889de5a78be58c96")));
     qInfo() << "========== Starting Machine Initialization ==========";
 
+    // 步骤1：进入空闲状态
     appendLog(zh("e6ada5e9aaa431efbc9ae8bf9be585a5e7a9bae997b2e78ab6e68081"));
     qInfo() << "Step 1: Entering IDLE state";
     controller->requestIdle(nodeId);
 
-    QTimer::singleShot(500, this, [this, controller, nodeId]() {
+    QTimer::singleShot(800, this, [this, controllerGuard, nodeId]() {
+        if (!controllerGuard || !controllerGuard->isConnected()) {
+            appendLog(QStringLiteral("Initialization cancelled for node %1: controller unavailable").arg(nodeId));
+            return;
+        }
+
+        ODriveMotorController *controller = controllerGuard.data();
+        // 步骤2：清除错误
         appendLog(zh("e6ada5e9aaa432efbc9ae6b885e999a4e99499e8afaf"));
         qInfo() << "Step 2: Clearing errors";
         controller->clearErrors(nodeId, false);
 
-        QTimer::singleShot(500, this, [this, controller, nodeId]() {
-            appendLog(zh("e6ada5e9aaa433efbc9ae689a7e8a18ce5ae8ce695b4e6a0a1e58786"));
-            qInfo() << "Step 3: Running full calibration";
-            controller->requestFullCalibration(nodeId);
+        QTimer::singleShot(800, this, [this, controllerGuard, nodeId]() {
+            if (!controllerGuard || !controllerGuard->isConnected()) {
+                appendLog(QStringLiteral("Initialization cancelled for node %1: controller unavailable").arg(nodeId));
+                return;
+            }
 
-            QTimer::singleShot(12000, this, [this, controller, nodeId]() {
-                const ODriveMotorController::AxisStatus &status = controller->status(nodeId);
+            ODriveMotorController *controller = controllerGuard.data();
 
-                if (status.axisError == 0) {
-                    appendLog(zh("e6ada5e9aaa434efbc9ae6a0a1e58786e68890e58a9fefbc8ce8bf9be585a5e997ade78eaf"));
-                    qInfo() << "Step 4: Calibration successful, entering closed loop";
-                    controller->requestClosedLoop(nodeId);
+            // 步骤3：检查当前状态
+            controller->requestAllTelemetry(nodeId, false);
 
-                    QTimer::singleShot(1000, this, [this, controller, nodeId]() {
-                        const ODriveMotorController::AxisStatus &finalStatus = controller->status(nodeId);
+            QTimer::singleShot(500, this, [this, controllerGuard, nodeId]() {
+                if (!controllerGuard || !controllerGuard->isConnected()) {
+                    appendLog(QStringLiteral("Initialization cancelled for node %1: controller unavailable").arg(nodeId));
+                    return;
+                }
 
-                        if (finalStatus.axisError == 0 && finalStatus.axisState == 8) {
-                            appendLog(zh("e695b4e69cbae5889de5a78be58c96e5ae8ce68890efbc8ce794b5e69cbae5b7b2e5b0b1e7bbaa"));
-                            qInfo() << "Machine initialization complete! Motor is ready";
-                        } else {
-                            appendLog(zh("e5889de5a78be58c96e5ae8ce68890e4bd86e4bb8de69c89e5bc82e5b8b8efbc9ae8bdb4e99499e8afaf3d30782531efbc8ce8bdb4e78ab6e680813d2532")
-                                      .arg(QString::number(finalStatus.axisError, 16).toUpper())
-                                      .arg(finalStatus.axisState));
-                            qInfo() << "Machine initialization complete but has errors:"
-                                    << QString::number(finalStatus.axisError, 16)
-                                    << "state:" << finalStatus.axisState;
+                ODriveMotorController *controller = controllerGuard.data();
+                const ODriveMotorController::AxisStatus &preStatus = controller->status(nodeId);
+                
+                // 检查母线电压
+                if (preStatus.busVoltageVolts < 10.0f) {
+                    appendLog(zh("e5889de5a78be58c96e5a4b1e8b4a5efbc9ae6af8de7babfe794b5e58e8be8bf87e4bd8eefbc8ce8afb7e6a380e69fa5e4be9be794b5"));
+                    qInfo() << "Initialization failed: bus voltage too low";
+                    appendLog(QStringLiteral("========== %1 ==========").arg(zh("e5889de5a78be58c96e5a4b1e8b4a5")));
+                    updateStatusPanel();
+                    return;
+                }
+                
+                appendLog(zh("e6ada5e9aaa433efbc9ae689a7e8a18ce5ae8ce695b4e6a0a1e58786efbc88e9a284e8aea1e99c8012e7a792efbc89"));
+                qInfo() << "Step 3: Running full calibration (estimated 12 seconds)";
+                controller->requestFullCalibration(nodeId);
+
+                QTimer::singleShot(12000, this, [this, controllerGuard, nodeId]() {
+                    if (!controllerGuard || !controllerGuard->isConnected()) {
+                        appendLog(QStringLiteral("Initialization cancelled for node %1: controller unavailable").arg(nodeId));
+                        return;
+                    }
+
+                    ODriveMotorController *controller = controllerGuard.data();
+
+                    // 步骤4：检查校准结果
+                    controller->requestAllTelemetry(nodeId, false);
+
+                    QTimer::singleShot(500, this, [this, controllerGuard, nodeId]() {
+                        if (!controllerGuard || !controllerGuard->isConnected()) {
+                            appendLog(QStringLiteral("Initialization cancelled for node %1: controller unavailable").arg(nodeId));
+                            return;
                         }
 
-                        appendLog(QStringLiteral("========== %1 ==========").arg(zh("e5889de5a78be58c96e5ae8ce68890")));
-                        qInfo() << "========== Initialization Complete ==========";
-                        updateStatusPanel();
+                        ODriveMotorController *controller = controllerGuard.data();
+                        const ODriveMotorController::AxisStatus &status = controller->status(nodeId);
+
+                        if (status.axisError == 0 && status.motorError == 0 && status.encoderError == 0) {
+                            appendLog(zh("e6ada5e9aaa434efbc9ae6a0a1e58786e68890e58a9fefbc8ce8bf9be585a5e997ade78eaf"));
+                            qInfo() << "Step 4: Calibration successful, entering closed loop";
+                            
+                            // 设置安全的限制
+                            const float safeVelLimit = (nodeId == 0) ? 5.0f : 20.0f;
+                            controller->setLimits(nodeId, safeVelLimit, 10.0f);
+                            
+                            QTimer::singleShot(500, this, [this, controllerGuard, nodeId]() {
+                                if (!controllerGuard || !controllerGuard->isConnected()) {
+                                    appendLog(QStringLiteral("Initialization cancelled for node %1: controller unavailable").arg(nodeId));
+                                    return;
+                                }
+
+                                ODriveMotorController *controller = controllerGuard.data();
+                                controller->requestClosedLoop(nodeId);
+
+                                QTimer::singleShot(1500, this, [this, controllerGuard, nodeId]() {
+                                    if (!controllerGuard || !controllerGuard->isConnected()) {
+                                        appendLog(QStringLiteral("Initialization cancelled for node %1: controller unavailable").arg(nodeId));
+                                        return;
+                                    }
+
+                                    ODriveMotorController *controller = controllerGuard.data();
+                                    const ODriveMotorController::AxisStatus &finalStatus = controller->status(nodeId);
+
+                                    if (finalStatus.axisError == 0 && finalStatus.axisState == 8) {
+                                        appendLog(zh("e695b4e69cbae5889de5a78be58c96e5ae8ce68890efbc8ce794b5e69cbae5b7b2e5b0b1e7bbaa"));
+                                        qInfo() << "Machine initialization complete! Motor is ready";
+                                    } else if (finalStatus.axisError != 0) {
+                                        appendLog(zh("e5889de5a78be58c96e5ae8ce68890e4bd86e4bb8de69c89e99499e8afaf3a20302531")
+                                                  .arg(QString::number(finalStatus.axisError, 16).toUpper()));
+                                        appendLog(zh("e8afb7e6a380e69fa5e99499e8afafe4bba3e7a081e5928ce7a1ace4bbb6e8bf9ee68ea5"));
+                                        qInfo() << "Initialization complete but has errors:" << QString::number(finalStatus.axisError, 16);
+                                    } else {
+                                        appendLog(zh("e5889de5a78be58c96e5ae8ce68890e4bd86e69caae8bf9be585a5e997ade78eafefbc8ce5bd93e5898de78ab6e680813a2531")
+                                                  .arg(finalStatus.axisState));
+                                        qInfo() << "Initialization complete but not in closed loop, state:" << finalStatus.axisState;
+                                    }
+
+                                    appendLog(QStringLiteral("========== %1 ==========").arg(zh("e5889de5a78be58c96e5ae8ce68890")));
+                                    qInfo() << "========== Initialization Complete ==========";
+                                    updateStatusPanel();
+                                });
+                            });
+                        } else {
+                            appendLog(zh("e6a0a1e58786e5a4b1e8b4a5efbc9a"));
+                            if (status.axisError != 0) {
+                                appendLog(zh("20202de8bdb4e99499e8afaf3a20302531").arg(QString::number(status.axisError, 16).toUpper()));
+                            }
+                            if (status.motorError != 0) {
+                                appendLog(zh("20202de794b5e69cbae99499e8afaf3a20302531").arg(QString::number(status.motorError, 16).toUpper()));
+                            }
+                            if (status.encoderError != 0) {
+                                appendLog(zh("20202de7bc96e7a081e599a8e99499e8afaf3a20302531").arg(QString::number(status.encoderError, 16).toUpper()));
+                            }
+                            qInfo() << "Calibration failed - axis:" << QString::number(status.axisError, 16)
+                                    << "motor:" << QString::number(status.motorError, 16)
+                                    << "encoder:" << QString::number(status.encoderError, 16);
+                            appendLog(zh("e8afb7e6a380e69fa5efbc9a"));
+                            appendLog(zh("20201. e7a1ace4bbb6e8bf9ee68ea5e698afe590a6e6ada3e7a1ae"));
+                            appendLog(zh("20202. e7bc96e7a081e599a8e8bf9ee7babfe698afe590a6e6ada3e7a1ae"));
+                            appendLog(zh("20203. e794b5e69cbae79bb8e7babfe698afe590a6e6ada3e7a1ae"));
+                            appendLog(zh("20204. e4be9be794b5e698afe590a6e7a8b3e5ae9a"));
+                            appendLog(QStringLiteral("========== %1 ==========").arg(zh("e5889de5a78be58c96e5a4b1e8b4a5")));
+                            qInfo() << "========== Initialization Failed ==========";
+                            updateStatusPanel();
+                        }
                     });
-                } else {
-                    appendLog(zh("e6a0a1e58786e5a4b1e8b4a5efbc9ae8bdb4e99499e8afaf3d30782531")
-                              .arg(QString::number(status.axisError, 16).toUpper()));
-                    qInfo() << "Calibration failed, error:" << QString::number(status.axisError, 16);
-                    appendLog(QStringLiteral("========== %1 ==========").arg(zh("e5889de5a78be58c96e5a4b1e8b4a5")));
-                    qInfo() << "========== Initialization Failed ==========";
-                    updateStatusPanel();
-                }
+                });
             });
         });
     });
@@ -2974,7 +3366,12 @@ void MainWindow::loadSettings()
     updateBoardRowVisibility();
 
     if (m_homeSpeedSpin) m_homeSpeedSpin->setValue(settings.value(QStringLiteral("motion/home_speed"), m_homeSpeedSpin->value()).toDouble());
-    if (m_jogSpeedSpin) m_jogSpeedSpin->setValue(settings.value(QStringLiteral("motion/jog_speed"), m_jogSpeedSpin->value()).toDouble());
+    if (m_jogSpeedSpin) {
+        const QVariant driveSpeedValue = settings.contains(QStringLiteral("motion/drive_speed"))
+                ? settings.value(QStringLiteral("motion/drive_speed"))
+                : settings.value(QStringLiteral("motion/jog_speed"), m_jogSpeedSpin->value());
+        m_jogSpeedSpin->setValue(driveSpeedValue.toDouble());
+    }
     if (m_scanAxisLengthSpin) m_scanAxisLengthSpin->setValue(settings.value(QStringLiteral("motion/scan_axis_length"), m_scanAxisLengthSpin->value()).toDouble());
     if (m_scanSpeedSpin) m_scanSpeedSpin->setValue(settings.value(QStringLiteral("motion/scan_speed"), m_scanSpeedSpin->value()).toDouble());
     if (m_stepAxisLengthSpin) m_stepAxisLengthSpin->setValue(settings.value(QStringLiteral("motion/step_axis_length"), m_stepAxisLengthSpin->value()).toDouble());
@@ -3037,7 +3434,10 @@ void MainWindow::saveSettings() const
     if (m_debugScaleSpin) settings.setValue(QStringLiteral("debug/scale"), m_debugScaleSpin->value());
 
     if (m_homeSpeedSpin) settings.setValue(QStringLiteral("motion/home_speed"), m_homeSpeedSpin->value());
-    if (m_jogSpeedSpin) settings.setValue(QStringLiteral("motion/jog_speed"), m_jogSpeedSpin->value());
+    if (m_jogSpeedSpin) {
+        settings.setValue(QStringLiteral("motion/drive_speed"), m_jogSpeedSpin->value());
+        settings.remove(QStringLiteral("motion/jog_speed"));
+    }
     if (m_scanAxisLengthSpin) settings.setValue(QStringLiteral("motion/scan_axis_length"), m_scanAxisLengthSpin->value());
     if (m_scanSpeedSpin) settings.setValue(QStringLiteral("motion/scan_speed"), m_scanSpeedSpin->value());
     if (m_stepAxisLengthSpin) settings.setValue(QStringLiteral("motion/step_axis_length"), m_stepAxisLengthSpin->value());
@@ -3430,13 +3830,16 @@ void MainWindow::updateDebugNodeCombo()
     }
 
     const int boardIndex = currentDebugBoardIndex();
+    m_updatingDebugNodeCombo = true;
     m_debugNodeCombo->blockSignals(true);
     m_debugNodeCombo->clear();
+
     if (boardIndex >= 0 && boardIndex < m_boardConfigRows.size()) {
         const QList<quint8> nodes = m_boardConfigRows[boardIndex].detectedNodes;
         for (const quint8 nodeId : nodes) {
             m_debugNodeCombo->addItem(QStringLiteral("Node %1").arg(nodeId), nodeId);
         }
+
         const QVariant savedNode = m_debugNodeCombo->property("saved_node_id");
         int index = savedNode.isValid() ? m_debugNodeCombo->findData(savedNode) : -1;
         if (index < 0) {
@@ -3449,11 +3852,25 @@ void MainWindow::updateDebugNodeCombo()
             m_debugNodeCombo->setCurrentIndex(index);
         }
         m_debugNodeCombo->setEnabled(m_debugNodeCombo->count() > 0);
+
+        QStringList nodeStrings;
+        for (const quint8 nodeId : nodes) {
+            nodeStrings << QString::number(nodeId);
+        }
+        if (m_activeNodesLabel) {
+            m_activeNodesLabel->setText(nodes.isEmpty()
+                                        ? zh("e6a380e6b58be588b0e79a84e88a82e782b9320e697a0")
+                                        : QStringLiteral("%1: %2").arg(zh("e6a380e6b58be588b0e79a84e88a82e782b9"), nodeStrings.join(", ")));
+        }
     } else {
         m_debugNodeCombo->setEnabled(false);
+        if (m_activeNodesLabel) {
+            m_activeNodesLabel->setText(zh("e6a380e6b58be588b0e79a84e88a82e782b93a202d2d"));
+        }
     }
+
     m_debugNodeCombo->blockSignals(false);
-    updateDetectedNodesList();
+    m_updatingDebugNodeCombo = false;
 }
 
 void MainWindow::updateDebugScaleSpin()
@@ -3520,30 +3937,89 @@ void MainWindow::refreshBoardNodes(int boardIndex, bool temporaryConnectionAllow
         return;
     }
 
+    if (!temporaryController) {
+        for (int otherBoard = 0; otherBoard < boardIndex && otherBoard < m_boardRuntimes.size(); ++otherBoard) {
+            if (!m_boardRuntimes[otherBoard].connected) {
+                continue;
+            }
+            if (m_boardRuntimes[otherBoard].controller != controller) {
+                continue;
+            }
+
+            appendLog(QStringLiteral("%1 using shared interface scan handled by %2")
+                      .arg(boardLogPrefix(boardIndex), boardDisplayName(otherBoard)));
+            updateBoardStatusLabel(boardIndex, QStringLiteral("shared scan"));
+            return;
+        }
+    }
+
     appendLog(QStringLiteral("%1 %2").arg(boardLogPrefix(boardIndex), zh("e6ada3e59ca8e689abe68f8fe88a82e782b92e2e2e")));
     updateBoardStatusLabel(boardIndex, zh("e689abe68f8fe4b8ad"));
+    QPointer<ODriveMotorController> controllerGuard(controller);
     controller->probeAllNodes();
-    QTimer::singleShot(1500, this, [this, boardIndex, controller, temporaryController]() {
+    QTimer::singleShot(1500, this, [this, boardIndex, controllerGuard, temporaryController]() {
+        if (!controllerGuard) {
+            updateBoardStatusLabel(boardIndex, zh("e689abe68f8fe5b7b2e58f96e6b688"));
+            return;
+        }
+
+        ODriveMotorController *controller = controllerGuard.data();
         QList<quint8> nodes = controller->recentResponsiveNodeIds(2000);
         std::sort(nodes.begin(), nodes.end());
-        m_boardConfigRows[boardIndex].detectedNodes = nodes;
-        if (boardIndex < m_boardRuntimes.size() && m_boardRuntimes[boardIndex].connected) {
-            m_boardRuntimes[boardIndex].detectedNodes = nodes;
+
+        QList<int> affectedBoards;
+        if (temporaryController) {
+            affectedBoards << boardIndex;
+        } else {
+            for (int runtimeIndex = 0; runtimeIndex < m_boardRuntimes.size(); ++runtimeIndex) {
+                if (m_boardRuntimes[runtimeIndex].connected
+                        && m_boardRuntimes[runtimeIndex].controller == controller) {
+                    affectedBoards << runtimeIndex;
+                }
+            }
+            if (!affectedBoards.contains(boardIndex)) {
+                affectedBoards << boardIndex;
+            }
+            std::sort(affectedBoards.begin(), affectedBoards.end());
+            affectedBoards.erase(std::unique(affectedBoards.begin(), affectedBoards.end()), affectedBoards.end());
         }
-        updateBoardNodeCombos(boardIndex);
-        updateBoardStatusLabel(boardIndex);
+
+        for (const int affectedBoard : affectedBoards) {
+            if (affectedBoard < 0 || affectedBoard >= m_boardConfigRows.size()) {
+                continue;
+            }
+
+            m_boardConfigRows[affectedBoard].detectedNodes = nodes;
+            if (affectedBoard < m_boardRuntimes.size()
+                    && m_boardRuntimes[affectedBoard].connected
+                    && m_boardRuntimes[affectedBoard].controller == controller) {
+                m_boardRuntimes[affectedBoard].detectedNodes = nodes;
+            }
+
+            updateBoardNodeCombos(affectedBoard);
+            updateBoardStatusLabel(affectedBoard);
+        }
+
         updateDebugBoardCombo();
         updateDebugNodeCombo();
         updateDebugScaleSpin();
 
-        if (nodes.isEmpty()) {
-            appendLog(QStringLiteral("%1 %2").arg(boardLogPrefix(boardIndex), zh("e69caae6a380e6b58be588b0e88a82e782b9")));
-        } else {
-            QStringList nodeStrings;
-            for (const quint8 nodeId : nodes) {
-                nodeStrings << QString::number(nodeId);
+        for (const int affectedBoard : affectedBoards) {
+            if (affectedBoard < 0 || affectedBoard >= m_boardConfigRows.size()) {
+                continue;
             }
-            appendLog(QStringLiteral("%1 %2").arg(boardLogPrefix(boardIndex), zh("e6a380e6b58be588b0e88a82e782b93a202532").arg(nodeStrings.join(", "))));
+
+            if (nodes.isEmpty()) {
+                appendLog(QStringLiteral("%1 %2").arg(boardLogPrefix(affectedBoard), zh("e69caae6a380e6b58be588b0e88a82e782b9")));
+            } else {
+                QStringList nodeStrings;
+                for (const quint8 nodeId : nodes) {
+                    nodeStrings << QString::number(nodeId);
+                }
+                appendLog(QStringLiteral("%1 %2")
+                          .arg(boardLogPrefix(affectedBoard),
+                               zh("e6a380e6b58be588b0e88a82e782b93a202532").arg(nodeStrings.join(", "))));
+            }
         }
 
         if (temporaryController) {
@@ -3555,10 +4031,50 @@ void MainWindow::refreshBoardNodes(int boardIndex, bool temporaryConnectionAllow
 
 void MainWindow::connectBoardControllerSignals(int boardIndex, ODriveMotorController *controller)
 {
-    connect(controller, &ODriveMotorController::connectionChanged, this, [this, boardIndex](bool connected) {
-        if (boardIndex >= 0 && boardIndex < m_boardRuntimes.size()) {
-            m_boardRuntimes[boardIndex].connected = connected;
-            updateBoardStatusLabel(boardIndex, connected ? zh("e5b7b2e8bf9ee68ea5") : zh("e69caae8bf9ee68ea5"));
+    if (!controller) {
+        return;
+    }
+
+    for (int otherBoard = 0; otherBoard < m_boardRuntimes.size(); ++otherBoard) {
+        if (otherBoard != boardIndex && m_boardRuntimes[otherBoard].controller == controller) {
+            return;
+        }
+    }
+
+    const auto controllerPrefix = [this, controller, boardIndex]() {
+        QStringList boardNames;
+        QString interfaceName;
+
+        for (int runtimeIndex = 0; runtimeIndex < m_boardRuntimes.size(); ++runtimeIndex) {
+            if (m_boardRuntimes[runtimeIndex].controller != controller) {
+                continue;
+            }
+            boardNames << boardDisplayName(runtimeIndex);
+            if (interfaceName.isEmpty()) {
+                interfaceName = boardInterfaceName(runtimeIndex);
+            }
+        }
+
+        if (boardNames.isEmpty()) {
+            boardNames << boardDisplayName(boardIndex);
+        }
+        if (interfaceName.isEmpty()) {
+            interfaceName = boardInterfaceName(boardIndex);
+        }
+
+        const QString boardLabel = boardNames.join(QStringLiteral("/"));
+        return interfaceName.isEmpty()
+                ? QStringLiteral("[%1]").arg(boardLabel)
+                : QStringLiteral("[%1 %2]").arg(boardLabel, interfaceName);
+    };
+
+    connect(controller, &ODriveMotorController::connectionChanged, this, [this, controller](bool connected) {
+        for (int runtimeIndex = 0; runtimeIndex < m_boardRuntimes.size(); ++runtimeIndex) {
+            if (m_boardRuntimes[runtimeIndex].controller != controller) {
+                continue;
+            }
+            m_boardRuntimes[runtimeIndex].connected = connected;
+            updateBoardStatusLabel(runtimeIndex, connected ? zh("e5b7b2e8bf9ee68ea5") : zh("e69caae8bf9ee68ea5"));
         }
         updateConnectionStateFromBoards();
     });
@@ -3566,32 +4082,40 @@ void MainWindow::connectBoardControllerSignals(int boardIndex, ODriveMotorContro
     connect(controller, &ODriveMotorController::nodeStatusUpdated, this, [this](quint8 nodeId) {
         handleNodeStatusUpdate(nodeId);
     });
-    connect(controller, &ODriveMotorController::logMessage, this, [this, boardIndex](const QString &message) {
-        appendLog(QStringLiteral("%1 %2").arg(boardLogPrefix(boardIndex), message));
+    connect(controller, &ODriveMotorController::logMessage, this, [this, controllerPrefix](const QString &message) {
+        appendLog(QStringLiteral("%1 %2").arg(controllerPrefix(), message));
     });
-    connect(controller, &ODriveMotorController::rxMessage, this, [this, boardIndex](const QString &message) {
-        const QString tagged = QStringLiteral("%1 %2").arg(boardLogPrefix(boardIndex), message);
+    connect(controller, &ODriveMotorController::rxMessage, this, [this, controllerPrefix](const QString &message) {
+        const QString tagged = QStringLiteral("%1 %2").arg(controllerPrefix(), message);
         appendRxMessage(tagged);
         handleCustomTxRxMessage(tagged);
     });
-    connect(controller, &ODriveMotorController::errorMessage, this, [this, boardIndex](const QString &message) {
-        appendLog(QStringLiteral("%1 %2").arg(boardLogPrefix(boardIndex), message));
+    connect(controller, &ODriveMotorController::errorMessage, this, [this, controllerPrefix](const QString &message) {
+        appendLog(QStringLiteral("%1 %2").arg(controllerPrefix(), message));
     });
 }
 
 void MainWindow::disconnectAllBoards()
 {
+    QList<ODriveMotorController *> ownedControllers;
+
     for (int boardIndex = 0; boardIndex < m_boardRuntimes.size(); ++boardIndex) {
         BoardRuntime &runtime = m_boardRuntimes[boardIndex];
         runtime.connected = false;
         runtime.zeroPointInitialized = false;
-        if (runtime.controller) {
-            runtime.controller->disconnectDevice();
-            runtime.controller->deleteLater();
-            runtime.controller = nullptr;
+        if (runtime.controller && runtime.ownsController && !ownedControllers.contains(runtime.controller)) {
+            ownedControllers << runtime.controller;
         }
+        runtime.controller = nullptr;
+        runtime.ownsController = false;
         updateBoardStatusLabel(boardIndex);
     }
+
+    for (ODriveMotorController *controller : ownedControllers) {
+        controller->disconnectDevice();
+        controller->deleteLater();
+    }
+
     updateConnectionState(false);
 }
 
@@ -3618,7 +4142,7 @@ void MainWindow::syncConnectionEditorsFromAdvanced()
     if (!interfaceNames.isEmpty()) {
         summary += QStringLiteral(" | %1").arg(interfaceNames.join(", "));
     }
-    summary += QStringLiteral(" | %1 bps | %2 interface(s)")
+    summary += QStringLiteral(" | %1 bps | %2 board row(s)")
             .arg(QString::number(m_bitrateSpin->value()),
                  QString::number(interfaceNames.size()));
 
@@ -3988,37 +4512,103 @@ bool MainWindow::ensureAxisClosedLoop(int boardIndex, quint8 nodeId)
     if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size() || !m_boardRuntimes[boardIndex].controller) {
         return false;
     }
-    return m_boardRuntimes[boardIndex].controller->requestClosedLoop(nodeId);
+
+    ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
+    const ODriveMotorController::AxisStatus &status = controller->status(nodeId);
+
+    if (status.axisState == ODriveMotorController::ClosedLoopControl && status.axisError == 0) {
+        return true;
+    }
+
+    if (status.axisError != 0 || status.motorError != 0 || status.encoderError != 0 || status.controllerError != 0) {
+        logMotionIssueOnce(QStringLiteral("closed-loop/%1/%2").arg(boardIndex).arg(nodeId),
+                           QStringLiteral("%1 Node %2 has active errors, skipping forced closed-loop re-entry")
+                           .arg(boardLogPrefix(boardIndex))
+                           .arg(nodeId));
+        return false;
+    }
+
+    return controller->requestClosedLoop(nodeId);
 }
 
 bool MainWindow::commandAxisVelocity(int boardIndex, quint8 nodeId, double speedMmPerSecond, bool turnAxis)
 {
-    if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size()) {
+    if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size() || nodeId > 63) {
         return false;
     }
+
     ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
     if (!controller || !controller->isConnected()) {
         return false;
     }
 
-    // 确保电机在闭环状态
-    ensureAxisClosedLoop(boardIndex, nodeId);
-    
-    // 设置速度限制 - 使用更大的限制值以确保电机能够达到目标速度
-    const double velocityLimitMmPerSecond = qMax(qAbs(speedMmPerSecond) * 1.5, 10.0);
-    controller->setLimits(nodeId,
-                          static_cast<float>(mmPerSecondToTurnsPerSecond(boardIndex, velocityLimitMmPerSecond, turnAxis)),
-                          static_cast<float>(currentLimitAmps()));
-    
-    // 设置控制模式为速度控制，输入模式为Passthrough
-    controller->setControllerMode(nodeId,
-                                  ODriveMotorController::VelocityControl,
-                                  ODriveMotorController::Passthrough);
-    
-    // 发送速度命令
-    return controller->setVelocity(nodeId,
-                                   static_cast<float>(mmPerSecondToTurnsPerSecond(boardIndex, speedMmPerSecond, turnAxis)),
-                                   0.0f);
+    const QString axisKey = motionAxisKey(boardIndex, nodeId, turnAxis);
+    const double mmPerTurnValue = mmPerTurn(boardIndex, turnAxis);
+    if (mmPerTurnValue <= 0.0) {
+        logMotionIssueOnce(axisKey + QStringLiteral("/scale"),
+                           QStringLiteral("%1 invalid scale for node %2")
+                           .arg(boardLogPrefix(boardIndex))
+                           .arg(nodeId));
+        return false;
+    }
+
+    const bool stopCommand = qAbs(speedMmPerSecond) < 0.0001;
+    const ODriveMotorController::AxisStatus &status = controller->status(nodeId);
+    const bool hasErrors =
+            status.axisError != 0 || status.motorError != 0 || status.encoderError != 0 || status.controllerError != 0;
+    const bool alreadyClosedLoop =
+            status.axisState == ODriveMotorController::ClosedLoopControl && status.axisError == 0;
+
+    if (hasErrors) {
+        logMotionIssueOnce(axisKey + QStringLiteral("/errors"),
+                           QStringLiteral("%1 Node %2 motion command blocked by active errors")
+                           .arg(boardLogPrefix(boardIndex))
+                           .arg(nodeId));
+        return false;
+    }
+
+    if (stopCommand) {
+        return stopAxisVelocity(boardIndex, nodeId);
+    }
+
+    if (!alreadyClosedLoop && !ensureAxisClosedLoop(boardIndex, nodeId)) {
+        logMotionIssueOnce(axisKey + QStringLiteral("/closed-loop-failed"),
+                           QStringLiteral("%1 Node %2 failed to enter closed loop for jog command")
+                           .arg(boardLogPrefix(boardIndex))
+                           .arg(nodeId));
+        return false;
+    }
+
+    const float targetTurnsPerSecond =
+            static_cast<float>(mmPerSecondToTurnsPerSecond(boardIndex, speedMmPerSecond, turnAxis));
+    const float velocityLimitTurnsPerSecond =
+            qMax<float>(qAbs(targetTurnsPerSecond) * 1.5f, 1.0f);
+
+    const bool modeMatches =
+            status.currentControlMode == ODriveMotorController::VelocityControl
+            && status.currentInputMode == ODriveMotorController::Passthrough;
+    if (!modeMatches) {
+        controller->setControllerMode(nodeId,
+                                      ODriveMotorController::VelocityControl,
+                                      ODriveMotorController::Passthrough);
+    }
+
+    const float currentLimit = static_cast<float>(currentLimitAmps());
+    const bool limitMatches =
+            qAbs(status.currentVelocityLimit - velocityLimitTurnsPerSecond) < 0.01f
+            && qAbs(status.currentCurrentLimit - currentLimit) < 0.01f;
+    if (!limitMatches) {
+        controller->setLimits(nodeId, velocityLimitTurnsPerSecond, currentLimit);
+    }
+
+    const bool ok = controller->setVelocity(nodeId, targetTurnsPerSecond, 0.0f);
+    if (!ok) {
+        logMotionIssueOnce(axisKey + QStringLiteral("/set-velocity-failed"),
+                           QStringLiteral("%1 Node %2 failed to send jog velocity command")
+                           .arg(boardLogPrefix(boardIndex))
+                           .arg(nodeId));
+    }
+    return ok;
 }
 
 bool MainWindow::commandAxisPosition(int boardIndex,
@@ -4027,7 +4617,7 @@ bool MainWindow::commandAxisPosition(int boardIndex,
                                      double speedMmPerSecond,
                                      bool turnAxis)
 {
-    if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size()) {
+    if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size() || nodeId > 63) {
         return false;
     }
     ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
@@ -4035,7 +4625,23 @@ bool MainWindow::commandAxisPosition(int boardIndex,
         return false;
     }
 
-    ensureAxisClosedLoop(boardIndex, nodeId);
+    const ODriveMotorController::AxisStatus &status = controller->status(nodeId);
+    const bool hasErrors =
+            status.axisError != 0 || status.motorError != 0 || status.encoderError != 0 || status.controllerError != 0;
+    if (hasErrors) {
+        appendLog(QStringLiteral("%1 Node %2 position command blocked by active errors")
+                  .arg(boardLogPrefix(boardIndex))
+                  .arg(nodeId));
+        return false;
+    }
+
+    if (!ensureAxisClosedLoop(boardIndex, nodeId)) {
+        appendLog(QStringLiteral("%1 Node %2 failed to enter closed loop for position command")
+                  .arg(boardLogPrefix(boardIndex))
+                  .arg(nodeId));
+        return false;
+    }
+
     controller->setLimits(nodeId,
                           static_cast<float>(mmPerSecondToTurnsPerSecond(boardIndex, qMax(0.1, speedMmPerSecond), turnAxis)),
                           static_cast<float>(currentLimitAmps()));
@@ -4055,6 +4661,7 @@ void MainWindow::stopAllMotion(bool requestIdleState)
         if (!controller) {
             continue;
         }
+
         QList<quint8> nodeIds;
         nodeIds << boardTurnNodeId(boardIndex);
         if (!nodeIds.contains(boardDriveNodeId(boardIndex))) {
@@ -4062,10 +4669,7 @@ void MainWindow::stopAllMotion(bool requestIdleState)
         }
 
         for (const quint8 nodeId : nodeIds) {
-            controller->setControllerMode(nodeId,
-                                          ODriveMotorController::VelocityControl,
-                                          ODriveMotorController::Passthrough);
-            controller->setVelocity(nodeId, 0.0f, 0.0f);
+            stopAxisVelocity(boardIndex, nodeId);
             if (requestIdleState) {
                 controller->requestIdle(nodeId);
             }
@@ -4118,6 +4722,75 @@ double MainWindow::mmPerTurn(int boardIndex, bool turnAxis) const
 double MainWindow::mmPerSecondToTurnsPerSecond(int boardIndex, double mmPerSecond, bool turnAxis) const
 {
     return mmPerSecond / mmPerTurn(boardIndex, turnAxis);
+}
+
+void MainWindow::logMotionIssueOnce(const QString &key, const QString &message, int intervalMs)
+{
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const qint64 last = m_motionIssueLogTimes.value(key, 0);
+    if (last > 0 && (now - last) < intervalMs) {
+        return;
+    }
+
+    m_motionIssueLogTimes.insert(key, now);
+    appendLog(message);
+}
+
+QString MainWindow::motionAxisKey(int boardIndex, quint8 nodeId, bool turnAxis) const
+{
+    return QStringLiteral("%1/%2/%3")
+            .arg(boardIndex)
+            .arg(nodeId)
+            .arg(turnAxis ? QStringLiteral("turn") : QStringLiteral("drive"));
+}
+
+bool MainWindow::axisHasActiveErrors(int boardIndex, quint8 nodeId) const
+{
+    if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size() || !m_boardRuntimes[boardIndex].controller) {
+        return true;
+    }
+
+    const ODriveMotorController::AxisStatus &status = m_boardRuntimes[boardIndex].controller->status(nodeId);
+    return status.axisError != 0
+            || status.motorError != 0
+            || status.encoderError != 0
+            || status.controllerError != 0;
+}
+
+bool MainWindow::axisInClosedLoop(int boardIndex, quint8 nodeId) const
+{
+    if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size() || !m_boardRuntimes[boardIndex].controller) {
+        return false;
+    }
+
+    const ODriveMotorController::AxisStatus &status = m_boardRuntimes[boardIndex].controller->status(nodeId);
+    return status.axisState == ODriveMotorController::ClosedLoopControl && status.axisError == 0;
+}
+
+bool MainWindow::stopAxisVelocity(int boardIndex, quint8 nodeId)
+{
+    if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size() || nodeId > 63) {
+        return false;
+    }
+
+    ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
+    if (!controller || !controller->isConnected()) {
+        return false;
+    }
+
+    const ODriveMotorController::AxisStatus &status = controller->status(nodeId);
+    if (status.axisError != 0 || status.motorError != 0 || status.encoderError != 0 || status.controllerError != 0) {
+        return false;
+    }
+
+    if (status.currentControlMode != ODriveMotorController::VelocityControl
+            || status.currentInputMode != ODriveMotorController::Passthrough) {
+        controller->setControllerMode(nodeId,
+                                      ODriveMotorController::VelocityControl,
+                                      ODriveMotorController::Passthrough);
+    }
+
+    return controller->setVelocity(nodeId, 0.0f, 0.0f);
 }
 
 int MainWindow::connectedInterfaceCount() const

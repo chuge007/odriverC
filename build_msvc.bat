@@ -3,12 +3,24 @@ setlocal
 
 cd /d d:\dev\odriveCar
 
-set "VCVARS=C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars64.bat"
+set "VCVARS="
+for %%I in (
+    "C:\Program Files (x86)\Microsoft Visual Studio\2017\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+    "C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional\VC\Auxiliary\Build\vcvars64.bat"
+    "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars64.bat"
+    "C:\Program Files (x86)\Microsoft Visual Studio\2017\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+    "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+    "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"
+    "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+    "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+) do (
+    if not defined VCVARS if exist %%~I set "VCVARS=%%~I"
+)
+
 set "QMAKE=D:\qt\5.12.4\msvc2017_64\bin\qmake.exe"
 
-if not exist "%VCVARS%" (
-    echo [ERROR] vcvars64.bat not found:
-    echo %VCVARS%
+if not defined VCVARS (
+    echo [ERROR] vcvars64.bat not found in common Visual Studio locations.
     exit /b 1
 )
 

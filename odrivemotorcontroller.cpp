@@ -5,6 +5,7 @@
 #include <QCanBusFrame>
 #include <QDateTime>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QList>
@@ -163,6 +164,70 @@ bool runSlcanCommand(QSerialPort *serialPort,
 
     return true;
 }
+
+QString candleBridgeScriptPath()
+{
+    QString scriptPath = QCoreApplication::applicationDirPath() + QStringLiteral("/candle_bridge.py");
+    if (!QFileInfo::exists(scriptPath)) {
+        scriptPath = QCoreApplication::applicationDirPath() + QStringLiteral("/../candle_bridge.py");
+    }
+    return scriptPath;
+}
+
+QStringList enumerateCandleInterfaces(QString *errorMessage)
+{
+    QStringList interfaces;
+    QProcess process;
+    process.setProgram(QStringLiteral("python"));
+    process.setArguments(QStringList()
+                         << QStringLiteral("-u")
+                         << candleBridgeScriptPath()
+                         << QStringLiteral("--list"));
+    process.setProcessChannelMode(QProcess::SeparateChannels);
+    process.start();
+
+    if (!process.waitForStarted(3000)) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to start candle bridge helper: %1")
+                    .arg(process.errorString());
+        }
+        return interfaces;
+    }
+
+    process.waitForFinished(5000);
+    const QByteArray stdoutData = process.readAllStandardOutput().trimmed();
+    const QByteArray stderrData = process.readAllStandardError().trimmed();
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(stdoutData, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        if (errorMessage) {
+            *errorMessage = stdoutData.isEmpty()
+                    ? QStringLiteral("Candle helper returned no device list. %1")
+                          .arg(QString::fromUtf8(stderrData))
+                    : QStringLiteral("Invalid candle helper output: %1")
+                          .arg(QString::fromUtf8(stdoutData));
+        }
+        return interfaces;
+    }
+
+    const QJsonObject obj = doc.object();
+    const QJsonArray arr = obj.value(QStringLiteral("interfaces")).toArray();
+    for (const QJsonValue &value : arr) {
+        const QString name = value.toString().trimmed();
+        if (!name.isEmpty()) {
+            interfaces << name;
+        }
+    }
+
+    interfaces.removeDuplicates();
+    std::sort(interfaces.begin(), interfaces.end());
+
+    if (errorMessage) {
+        *errorMessage = obj.value(QStringLiteral("error")).toString().trimmed();
+    }
+    return interfaces;
+}
 }
 
 ODriveMotorController::ODriveMotorController(QObject *parent)
@@ -199,12 +264,14 @@ QStringList ODriveMotorController::availableInterfaces(const QString &plugin, QS
         for (const QSerialPortInfo &info : QSerialPortInfo::availablePorts()) {
             interfaces << info.portName();
         }
-        interfaces << QStringLiteral("candle0");
+        QString candleError;
+        interfaces << enumerateCandleInterfaces(&candleError);
         interfaces.removeDuplicates();
         std::sort(interfaces.begin(), interfaces.end());
         if (errorMessage) {
             *errorMessage = interfaces.isEmpty()
-                    ? QStringLiteral("No serial ports or candleLight adapters detected for AUTO mode.")
+                    ? QStringLiteral("No serial ports or candleLight adapters detected for AUTO mode. %1")
+                          .arg(candleError)
                     : QString();
         }
         return interfaces;
@@ -217,8 +284,13 @@ QStringList ODriveMotorController::availableInterfaces(const QString &plugin, QS
         return interfaces;
     }
     if (plugin == QStringLiteral("candle")) {
-        interfaces << QStringLiteral("candle0");
-        if (errorMessage) *errorMessage = QString();
+        interfaces = enumerateCandleInterfaces(errorMessage);
+        if (interfaces.isEmpty()) {
+            interfaces << QStringLiteral("candle0");
+            if (errorMessage && errorMessage->trimmed().isEmpty()) {
+                *errorMessage = QStringLiteral("No candleLight adapters detected, showing fallback channel candle0.");
+            }
+        }
         return interfaces;
     }
     QString localError;
@@ -397,10 +469,7 @@ bool ODriveMotorController::connectCandleDevice(const QString &interfaceName, in
 {
     clearCandleProcess();
 
-    QString scriptPath = QCoreApplication::applicationDirPath() + QStringLiteral("/candle_bridge.py");
-    if (!QFileInfo::exists(scriptPath)) {
-        scriptPath = QCoreApplication::applicationDirPath() + QStringLiteral("/../candle_bridge.py");
-    }
+    QString scriptPath = candleBridgeScriptPath();
     emit logMessage(QStringLiteral("candle bridge script: %1").arg(scriptPath));
     m_candleProcess = new QProcess(this);
     m_candleProcess->setProgram(QStringLiteral("python"));
