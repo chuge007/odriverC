@@ -2055,7 +2055,7 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
                 updateProgramStatus(zh("e6898be58aa8e782b9e58aa8e5b7b2e4b8ade6ada2e887aae58aa8e689abe68f8f"));
             }
 
-            QStringList notReadyAxes;
+            QStringList errorAxes;
             for (const int boardIndex : boardIndices) {
                 QList<quint8> requiredNodeIds;
                 requiredNodeIds << boardTurnNodeId(boardIndex);
@@ -2065,50 +2065,102 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
                 }
 
                 for (const quint8 requiredNodeId : requiredNodeIds) {
-                    if (!axisInClosedLoop(boardIndex, requiredNodeId) || axisHasActiveErrors(boardIndex, requiredNodeId)) {
-                        notReadyAxes << QStringLiteral("%1 Node %2")
-                                        .arg(boardLogPrefix(boardIndex))
-                                        .arg(requiredNodeId);
+                    if (axisHasActiveErrors(boardIndex, requiredNodeId)) {
+                        errorAxes << QStringLiteral("%1 Node %2")
+                                      .arg(boardLogPrefix(boardIndex))
+                                      .arg(requiredNodeId);
                     }
                 }
             }
 
-            if (!notReadyAxes.isEmpty()) {
-                appendLog(QStringLiteral("Motion blocked: axes not ready -> %1")
-                          .arg(notReadyAxes.join(QStringLiteral(", "))));
-                updateProgramStatus(QStringLiteral("小车运动已拒绝：存在未闭环或带错误电机"));
+            if (!errorAxes.isEmpty()) {
+                appendLog(QStringLiteral("Motion blocked: axes have active errors -> %1")
+                          .arg(errorAxes.join(QStringLiteral(", "))));
+                updateProgramStatus(QStringLiteral("小车运动已拒绝：存在带错误电机"));
                 return;
             }
 
+            struct WheelCommand
+            {
+                int boardIndex = -1;
+                quint8 nodeId = 0;
+                bool turnAxis = false;
+                double speedMmPerSecond = 0.0;
+                QString label;
+            };
+
             const double targetSpeed = direction * qMax(0.1, m_jogSpeedSpin->value());
+            QList<WheelCommand> wheelCommands;
+            wheelCommands.reserve(boardIndices.size() * 2);
+
+            for (const int boardIndex : boardIndices) {
+                if (turning) {
+                    wheelCommands.append(WheelCommand{boardIndex,
+                                                      boardTurnNodeId(boardIndex),
+                                                      true,
+                                                      -targetSpeed,
+                                                      QStringLiteral("%1:L").arg(boardDisplayName(boardIndex))});
+                    wheelCommands.append(WheelCommand{boardIndex,
+                                                      boardDriveNodeId(boardIndex),
+                                                      false,
+                                                      targetSpeed,
+                                                      QStringLiteral("%1:R").arg(boardDisplayName(boardIndex))});
+                } else {
+                    wheelCommands.append(WheelCommand{boardIndex,
+                                                      boardTurnNodeId(boardIndex),
+                                                      true,
+                                                      targetSpeed,
+                                                      QStringLiteral("%1:L").arg(boardDisplayName(boardIndex))});
+                    wheelCommands.append(WheelCommand{boardIndex,
+                                                      boardDriveNodeId(boardIndex),
+                                                      false,
+                                                      targetSpeed,
+                                                      QStringLiteral("%1:R").arg(boardDisplayName(boardIndex))});
+                }
+            }
+
             int successCount = 0;
             int failCount = 0;
             QStringList statusList;
+            QMap<int, QStringList> boardStatusMap;
 
-            for (const int boardIndex : boardIndices) {
-                bool leftOk = false;
-                bool rightOk = false;
-
-                if (turning) {
-                    leftOk = commandWheelVelocity(boardIndex, true, -targetSpeed);
-                    rightOk = commandWheelVelocity(boardIndex, false, targetSpeed);
-                } else {
-                    leftOk = commandWheelVelocity(boardIndex, true, targetSpeed);
-                    rightOk = commandWheelVelocity(boardIndex, false, targetSpeed);
-                }
-
-                successCount += leftOk ? 1 : 0;
-                successCount += rightOk ? 1 : 0;
-                failCount += leftOk ? 0 : 1;
-                failCount += rightOk ? 0 : 1;
-
-                statusList << QStringLiteral("%1:L%2 R%3")
-                              .arg(boardDisplayName(boardIndex))
-                              .arg(leftOk ? QStringLiteral("OK") : QStringLiteral("FAIL"))
-                              .arg(rightOk ? QStringLiteral("OK") : QStringLiteral("FAIL"));
+            QList<bool> preparedResults;
+            preparedResults.reserve(wheelCommands.size());
+            for (const WheelCommand &command : wheelCommands) {
+                preparedResults.append(prepareAxisVelocityControl(command.boardIndex,
+                                                                 command.nodeId,
+                                                                 command.speedMmPerSecond,
+                                                                 command.turnAxis));
             }
 
-            const int totalWheelGroups = boardIndices.size() * 2;
+            for (int i = 0; i < wheelCommands.size(); ++i) {
+                const WheelCommand &command = wheelCommands.at(i);
+                const bool preparedOk = preparedResults.value(i, false);
+                const bool ok = preparedOk
+                        ? sendPreparedAxisVelocity(command.boardIndex,
+                                                   command.nodeId,
+                                                   command.speedMmPerSecond,
+                                                   command.turnAxis)
+                        : false;
+
+                successCount += ok ? 1 : 0;
+                failCount += ok ? 0 : 1;
+                boardStatusMap[command.boardIndex] << QStringLiteral("%1%2")
+                                                      .arg(command.turnAxis ? QStringLiteral("L") : QStringLiteral("R"))
+                                                      .arg(ok ? QStringLiteral("OK") : QStringLiteral("FAIL"));
+            }
+
+            for (const int boardIndex : boardIndices) {
+                const QStringList parts = boardStatusMap.value(boardIndex);
+                const QString leftState = parts.value(0, QStringLiteral("LFAIL")).mid(1);
+                const QString rightState = parts.value(1, QStringLiteral("RFAIL")).mid(1);
+                statusList << QStringLiteral("%1:L%2 R%3")
+                              .arg(boardDisplayName(boardIndex))
+                              .arg(leftState)
+                              .arg(rightState);
+            }
+
+            const int totalWheelGroups = wheelCommands.size();
             QString syncStatus = QString(zh("e5908ce6ada5") + " %1/%2 " + zh("e68890e58a9f"))
                     .arg(successCount)
                     .arg(totalWheelGroups);
@@ -4682,13 +4734,10 @@ bool MainWindow::ensureAxisClosedLoop(int boardIndex, quint8 nodeId)
     return controller->requestClosedLoop(nodeId);
 }
 
-bool MainWindow::commandWheelVelocity(int boardIndex, bool leftWheel, double speedMmPerSecond)
-{
-    const quint8 nodeId = leftWheel ? boardTurnNodeId(boardIndex) : boardDriveNodeId(boardIndex);
-    return commandAxisVelocity(boardIndex, nodeId, speedMmPerSecond, leftWheel);
-}
-
-bool MainWindow::commandAxisVelocity(int boardIndex, quint8 nodeId, double speedMmPerSecond, bool turnAxis)
+bool MainWindow::prepareAxisVelocityControl(int boardIndex,
+                                            quint8 nodeId,
+                                            double speedMmPerSecond,
+                                            bool turnAxis)
 {
     if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size() || nodeId > 63) {
         return false;
@@ -4710,7 +4759,7 @@ bool MainWindow::commandAxisVelocity(int boardIndex, quint8 nodeId, double speed
     }
 
     const bool stopCommand = qAbs(speedMmPerSecond) < 0.0001;
-    const ODriveMotorController::AxisStatus &status = controller->status(nodeId);
+    const ODriveMotorController::AxisStatus status = controller->status(nodeId);
     const bool hasErrors =
             status.axisError != 0 || status.motorError != 0 || status.encoderError != 0 || status.controllerError != 0;
     const bool alreadyClosedLoop =
@@ -4725,7 +4774,7 @@ bool MainWindow::commandAxisVelocity(int boardIndex, quint8 nodeId, double speed
     }
 
     if (stopCommand) {
-        return stopAxisVelocity(boardIndex, nodeId);
+        return true;
     }
 
     if (!alreadyClosedLoop && !ensureAxisClosedLoop(boardIndex, nodeId)) {
@@ -4758,6 +4807,30 @@ bool MainWindow::commandAxisVelocity(int boardIndex, quint8 nodeId, double speed
         controller->setLimits(nodeId, velocityLimitTurnsPerSecond, currentLimit);
     }
 
+    return true;
+}
+
+bool MainWindow::sendPreparedAxisVelocity(int boardIndex,
+                                          quint8 nodeId,
+                                          double speedMmPerSecond,
+                                          bool turnAxis)
+{
+    if (boardIndex < 0 || boardIndex >= m_boardRuntimes.size() || nodeId > 63) {
+        return false;
+    }
+
+    ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
+    if (!controller || !controller->isConnected()) {
+        return false;
+    }
+
+    if (qAbs(speedMmPerSecond) < 0.0001) {
+        return stopAxisVelocity(boardIndex, nodeId);
+    }
+
+    const QString axisKey = motionAxisKey(boardIndex, nodeId, turnAxis);
+    const float targetTurnsPerSecond =
+            static_cast<float>(mmPerSecondToTurnsPerSecond(boardIndex, speedMmPerSecond, turnAxis));
     const bool ok = controller->setVelocity(nodeId, targetTurnsPerSecond, 0.0f);
     if (!ok) {
         logMotionIssueOnce(axisKey + QStringLiteral("/set-velocity-failed"),
@@ -4766,6 +4839,20 @@ bool MainWindow::commandAxisVelocity(int boardIndex, quint8 nodeId, double speed
                            .arg(nodeId));
     }
     return ok;
+}
+
+bool MainWindow::commandWheelVelocity(int boardIndex, bool leftWheel, double speedMmPerSecond)
+{
+    const quint8 nodeId = leftWheel ? boardTurnNodeId(boardIndex) : boardDriveNodeId(boardIndex);
+    return commandAxisVelocity(boardIndex, nodeId, speedMmPerSecond, leftWheel);
+}
+
+bool MainWindow::commandAxisVelocity(int boardIndex, quint8 nodeId, double speedMmPerSecond, bool turnAxis)
+{
+    if (!prepareAxisVelocityControl(boardIndex, nodeId, speedMmPerSecond, turnAxis)) {
+        return false;
+    }
+    return sendPreparedAxisVelocity(boardIndex, nodeId, speedMmPerSecond, turnAxis);
 }
 
 bool MainWindow::commandAxisPosition(int boardIndex,

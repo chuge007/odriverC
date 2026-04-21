@@ -178,6 +178,14 @@ private:
     void advanceScanStateMachine();
     void startScanSweep(double targetMm);
     bool ensureAxisClosedLoop(int boardIndex, quint8 nodeId);
+    bool prepareAxisVelocityControl(int boardIndex,
+                                    quint8 nodeId,
+                                    double speedMmPerSecond,
+                                    bool turnAxis);
+    bool sendPreparedAxisVelocity(int boardIndex,
+                                  quint8 nodeId,
+                                  double speedMmPerSecond,
+                                  bool turnAxis);
     bool commandWheelVelocity(int boardIndex, bool leftWheel, double speedMmPerSecond);
     bool commandAxisVelocity(int boardIndex,
                              quint8 nodeId,
