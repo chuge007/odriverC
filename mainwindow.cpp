@@ -2043,187 +2043,206 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
     connect(m_stopButton, &QPushButton::clicked,
             this, &MainWindow::stopProgram);
 
-    auto connectJogButton = [this](QPushButton *button, bool turning, double direction) {
-        connect(button, &QPushButton::pressed, this, [this, turning, direction]() {
-            const QList<int> boardIndices = connectedBoardIndices();
-            if (boardIndices.isEmpty()) {
-                return;
-            }
-
-            if (m_scanState.active) {
-                m_scanState = ScanState();
-                updateProgramStatus(zh("e6898be58aa8e782b9e58aa8e5b7b2e4b8ade6ada2e887aae58aa8e689abe68f8f"));
-            }
-
-            QStringList errorAxes;
-            for (const int boardIndex : boardIndices) {
-                QList<quint8> requiredNodeIds;
-                requiredNodeIds << boardTurnNodeId(boardIndex);
-                const quint8 driveNodeId = boardDriveNodeId(boardIndex);
-                if (!requiredNodeIds.contains(driveNodeId)) {
-                    requiredNodeIds << driveNodeId;
-                }
-
-                for (const quint8 requiredNodeId : requiredNodeIds) {
-                    if (axisHasActiveErrors(boardIndex, requiredNodeId)) {
-                        errorAxes << QStringLiteral("%1 Node %2")
-                                      .arg(boardLogPrefix(boardIndex))
-                                      .arg(requiredNodeId);
-                    }
-                }
-            }
-
-            if (!errorAxes.isEmpty()) {
-                appendLog(QStringLiteral("Motion blocked: axes have active errors -> %1")
-                          .arg(errorAxes.join(QStringLiteral(", "))));
-                updateProgramStatus(QStringLiteral("小车运动已拒绝：存在带错误电机"));
-                return;
-            }
-
-            struct WheelCommand
-            {
-                int boardIndex = -1;
-                quint8 nodeId = 0;
-                bool turnAxis = false;
-                double speedMmPerSecond = 0.0;
-                QString label;
-            };
-
-            const double targetSpeed = direction * qMax(0.1, m_jogSpeedSpin->value());
-            QList<WheelCommand> wheelCommands;
-            wheelCommands.reserve(boardIndices.size() * 2);
-
-            for (const int boardIndex : boardIndices) {
-                if (turning) {
-                    wheelCommands.append(WheelCommand{boardIndex,
-                                                      boardTurnNodeId(boardIndex),
-                                                      true,
-                                                      -targetSpeed,
-                                                      QStringLiteral("%1:L").arg(boardDisplayName(boardIndex))});
-                    wheelCommands.append(WheelCommand{boardIndex,
-                                                      boardDriveNodeId(boardIndex),
-                                                      false,
-                                                      targetSpeed,
-                                                      QStringLiteral("%1:R").arg(boardDisplayName(boardIndex))});
-                } else {
-                    wheelCommands.append(WheelCommand{boardIndex,
-                                                      boardTurnNodeId(boardIndex),
-                                                      true,
-                                                      targetSpeed,
-                                                      QStringLiteral("%1:L").arg(boardDisplayName(boardIndex))});
-                    wheelCommands.append(WheelCommand{boardIndex,
-                                                      boardDriveNodeId(boardIndex),
-                                                      false,
-                                                      targetSpeed,
-                                                      QStringLiteral("%1:R").arg(boardDisplayName(boardIndex))});
-                }
-            }
-
-            const int motionGeneration = ++m_motionCommandGeneration;
-            bool anyAxisNeedsClosedLoop = false;
-            for (const WheelCommand &command : wheelCommands) {
-                if (!axisInClosedLoop(command.boardIndex, command.nodeId)) {
-                    anyAxisNeedsClosedLoop = true;
-                    break;
-                }
-            }
-
-            QList<bool> preparedResults;
-            preparedResults.reserve(wheelCommands.size());
-            for (const WheelCommand &command : wheelCommands) {
-                preparedResults.append(prepareAxisVelocityControl(command.boardIndex,
-                                                                 command.nodeId,
-                                                                 command.speedMmPerSecond,
-                                                                 command.turnAxis));
-            }
-
-            const auto sendCommands = [this, motionGeneration, boardIndices, wheelCommands](const QList<bool> &prepared) {
-                if (motionGeneration != m_motionCommandGeneration) {
-                    return;
-                }
-
-                int successCount = 0;
-                int failCount = 0;
-                QStringList statusList;
-                QMap<int, QStringList> boardStatusMap;
-
-                for (int i = 0; i < wheelCommands.size(); ++i) {
-                    const WheelCommand &command = wheelCommands.at(i);
-                    const bool preparedOk = prepared.value(i, false);
-                    const bool ok = preparedOk
-                            ? sendPreparedAxisVelocity(command.boardIndex,
-                                                       command.nodeId,
-                                                       command.speedMmPerSecond,
-                                                       command.turnAxis)
-                            : false;
-
-                    successCount += ok ? 1 : 0;
-                    failCount += ok ? 0 : 1;
-                    boardStatusMap[command.boardIndex] << QStringLiteral("%1%2")
-                                                          .arg(command.turnAxis ? QStringLiteral("L") : QStringLiteral("R"))
-                                                          .arg(ok ? QStringLiteral("OK") : QStringLiteral("FAIL"));
-                }
-
-                for (const int boardIndex : boardIndices) {
-                    const QStringList parts = boardStatusMap.value(boardIndex);
-                    const QString leftState = parts.value(0, QStringLiteral("LFAIL")).mid(1);
-                    const QString rightState = parts.value(1, QStringLiteral("RFAIL")).mid(1);
-                    statusList << QStringLiteral("%1:L%2 R%3")
-                                  .arg(boardDisplayName(boardIndex))
-                                  .arg(leftState)
-                                  .arg(rightState);
-                }
-
-                const int totalWheelGroups = wheelCommands.size();
-                QString syncStatus = QString(zh("e5908ce6ada5") + " %1/%2 " + zh("e68890e58a9f"))
-                        .arg(successCount)
-                        .arg(totalWheelGroups);
-                if (failCount > 0) {
-                    syncStatus += QStringLiteral(" [%1").arg(failCount) + zh("e5a4b1e8b4a5") + QStringLiteral("]");
-                }
-                updateProgramStatus(syncStatus + QStringLiteral(" - ") + statusList.join(QStringLiteral(" ")));
-            };
-
-            if (anyAxisNeedsClosedLoop) {
-                appendLog(QStringLiteral("Motion prepare: waiting briefly for all target axes to enter closed loop before sending velocity"));
-                updateProgramStatus(QStringLiteral("正在等待四个电机进入闭环后同步启动"));
-                QTimer::singleShot(350, this, [sendCommands, preparedResults]() {
-                    sendCommands(preparedResults);
-                });
-                return;
-            }
-
-            sendCommands(preparedResults);
-        });
-
-        connect(button, &QPushButton::released, this, [this]() {
-            ++m_motionCommandGeneration;
-
-            const QList<int> boardIndices = connectedBoardIndices();
-            if (boardIndices.isEmpty()) {
-                return;
-            }
-
-            int stopCount = 0;
-            for (const int boardIndex : boardIndices) {
-                stopCount += stopAxisVelocity(boardIndex, boardTurnNodeId(boardIndex)) ? 1 : 0;
-                const quint8 driveNodeId = boardDriveNodeId(boardIndex);
-                if (driveNodeId != boardTurnNodeId(boardIndex)) {
-                    stopCount += stopAxisVelocity(boardIndex, driveNodeId) ? 1 : 0;
-                }
-            }
-            updateProgramStatus(QString(zh("e5819ce6ada2") + " %1").arg(stopCount));
-        });
+    struct ManualAxisCommand
+    {
+        int boardIndex = -1;
+        quint8 nodeId = 0;
+        bool turnAxis = false;
+        double speedMmPerSecond = 0.0;
+        QString label;
     };
 
-    // 当前四轮映射：
-    // 板0: turn=前左, drive=前右
-    // 板1: turn=后左, drive=后右
-    // 前进/后退：四轮同速；左右：左右轮差速
-    connectJogButton(m_forwardButton, false, 1.0);
-    connectJogButton(m_backwardButton, false, -1.0);
-    connectJogButton(m_leftButton, true, -1.0);
-    connectJogButton(m_rightButton, true, 1.0);
+    const auto applyManualMotion = [this]() {
+        const QList<int> boardIndices = connectedBoardIndices();
+        if (boardIndices.isEmpty()) {
+            return;
+        }
+
+        if (m_scanState.active) {
+            m_scanState = ScanState();
+            updateProgramStatus(zh("e6898be58aa8e782b9e58aa8e5b7b2e4b8ade6ada2e887aae58aa8e689abe68f8f"));
+        }
+
+        const double jogSpeed = qMax(0.1, m_jogSpeedSpin->value());
+        const double driveComponent = m_forwardPressed == m_backwardPressed
+                ? 0.0
+                : (m_forwardPressed ? jogSpeed : -jogSpeed);
+        const double turnComponent = m_leftPressed == m_rightPressed
+                ? 0.0
+                : (m_leftPressed ? jogSpeed : -jogSpeed);
+        const double leftWheelSpeed = driveComponent - turnComponent;
+        const double rightWheelSpeed = driveComponent + turnComponent;
+
+        QList<ManualAxisCommand> axisCommands;
+        axisCommands.reserve(boardIndices.size() * 2);
+        for (const int boardIndex : boardIndices) {
+            const QString leftLabel = boardIndex == 0 ? QStringLiteral("FrontLeft") : QStringLiteral("RearLeft");
+            const QString rightLabel = boardIndex == 0 ? QStringLiteral("FrontRight") : QStringLiteral("RearRight");
+
+            axisCommands.append(ManualAxisCommand{
+                                    boardIndex,
+                                    boardTurnNodeId(boardIndex),
+                                    true,
+                                    leftWheelSpeed,
+                                    QStringLiteral("%1:%2").arg(boardDisplayName(boardIndex), leftLabel)
+                                });
+            axisCommands.append(ManualAxisCommand{
+                                    boardIndex,
+                                    boardDriveNodeId(boardIndex),
+                                    false,
+                                    rightWheelSpeed,
+                                    QStringLiteral("%1:%2").arg(boardDisplayName(boardIndex), rightLabel)
+                                });
+        }
+
+        QStringList errorAxes;
+        for (const ManualAxisCommand &command : axisCommands) {
+            if (qAbs(command.speedMmPerSecond) < 0.0001) {
+                continue;
+            }
+            if (axisHasActiveErrors(command.boardIndex, command.nodeId)) {
+                errorAxes << QStringLiteral("%1 Node %2")
+                              .arg(boardLogPrefix(command.boardIndex))
+                              .arg(command.nodeId);
+            }
+        }
+
+        if (!errorAxes.isEmpty()) {
+            appendLog(QStringLiteral("Motion blocked: axes have active errors -> %1")
+                      .arg(errorAxes.join(QStringLiteral(", "))));
+            updateProgramStatus(QStringLiteral("小车运动已拒绝：存在带错误电机"));
+            return;
+        }
+
+        const int motionGeneration = ++m_motionCommandGeneration;
+        bool anyAxisNeedsClosedLoop = false;
+        for (const ManualAxisCommand &command : axisCommands) {
+            if (qAbs(command.speedMmPerSecond) < 0.0001) {
+                continue;
+            }
+            if (!axisInClosedLoop(command.boardIndex, command.nodeId)) {
+                anyAxisNeedsClosedLoop = true;
+                break;
+            }
+        }
+
+        QList<bool> preparedResults;
+        preparedResults.reserve(axisCommands.size());
+        for (const ManualAxisCommand &command : axisCommands) {
+            preparedResults.append(prepareAxisVelocityControl(command.boardIndex,
+                                                             command.nodeId,
+                                                             command.speedMmPerSecond,
+                                                             command.turnAxis));
+        }
+
+        const auto sendCommands = [this, motionGeneration, boardIndices, axisCommands, leftWheelSpeed, rightWheelSpeed](const QList<bool> &prepared) {
+            if (motionGeneration != m_motionCommandGeneration) {
+                return;
+            }
+
+            int successCount = 0;
+            int failCount = 0;
+            QStringList statusList;
+            QMap<int, QStringList> boardStatusMap;
+
+            for (int i = 0; i < axisCommands.size(); ++i) {
+                const ManualAxisCommand &command = axisCommands.at(i);
+                const bool preparedOk = prepared.value(i, false);
+                const bool ok = preparedOk
+                        ? sendPreparedAxisVelocity(command.boardIndex,
+                                                   command.nodeId,
+                                                   command.speedMmPerSecond,
+                                                   command.turnAxis)
+                        : false;
+
+                successCount += ok ? 1 : 0;
+                failCount += ok ? 0 : 1;
+                boardStatusMap[command.boardIndex] << QStringLiteral("%1%2")
+                                                      .arg(command.turnAxis ? QStringLiteral("T") : QStringLiteral("D"))
+                                                      .arg(ok ? QStringLiteral("OK") : QStringLiteral("FAIL"));
+            }
+
+            for (const int boardIndex : boardIndices) {
+                const QStringList parts = boardStatusMap.value(boardIndex);
+                const QString leftState = parts.value(0, QStringLiteral("TFAIL")).mid(1);
+                const QString rightState = parts.value(1, QStringLiteral("DFAIL")).mid(1);
+                statusList << QStringLiteral("%1:L%2 R%3")
+                              .arg(boardDisplayName(boardIndex))
+                              .arg(leftState)
+                              .arg(rightState);
+            }
+
+            if (qAbs(leftWheelSpeed) < 0.0001 && qAbs(rightWheelSpeed) < 0.0001) {
+                updateProgramStatus(QString(zh("e5819ce6ada2") + " %1").arg(successCount));
+                return;
+            }
+
+            QString syncStatus = QStringLiteral("Left=%1 Right=%2 | ")
+                    .arg(QString::number(leftWheelSpeed, 'f', 2))
+                    .arg(QString::number(rightWheelSpeed, 'f', 2));
+            syncStatus += QString(zh("e5908ce6ada5") + " %1/%2 " + zh("e68890e58a9f"))
+                    .arg(successCount)
+                    .arg(axisCommands.size());
+            if (failCount > 0) {
+                syncStatus += QStringLiteral(" [%1").arg(failCount) + zh("e5a4b1e8b4a5") + QStringLiteral("]");
+            }
+            updateProgramStatus(syncStatus + QStringLiteral(" - ") + statusList.join(QStringLiteral(" ")));
+        };
+
+        if (anyAxisNeedsClosedLoop) {
+            appendLog(QStringLiteral("Manual motion prepare: waiting briefly for all wheel axes to enter closed loop before sending vehicle command"));
+            updateProgramStatus(QStringLiteral("正在等待四个电机进入闭环后同步启动"));
+            QTimer::singleShot(350, this, [sendCommands, preparedResults]() {
+                sendCommands(preparedResults);
+            });
+            return;
+        }
+
+        sendCommands(preparedResults);
+    };
+
+    connect(m_forwardButton, &QPushButton::pressed, this, [this, applyManualMotion]() {
+        m_forwardPressed = true;
+        applyManualMotion();
+    });
+    connect(m_forwardButton, &QPushButton::released, this, [this, applyManualMotion]() {
+        m_forwardPressed = false;
+        applyManualMotion();
+    });
+
+    connect(m_backwardButton, &QPushButton::pressed, this, [this, applyManualMotion]() {
+        m_backwardPressed = true;
+        applyManualMotion();
+    });
+    connect(m_backwardButton, &QPushButton::released, this, [this, applyManualMotion]() {
+        m_backwardPressed = false;
+        applyManualMotion();
+    });
+
+    connect(m_leftButton, &QPushButton::pressed, this, [this, applyManualMotion]() {
+        m_leftPressed = true;
+        applyManualMotion();
+    });
+    connect(m_leftButton, &QPushButton::released, this, [this, applyManualMotion]() {
+        m_leftPressed = false;
+        applyManualMotion();
+    });
+
+    connect(m_rightButton, &QPushButton::pressed, this, [this, applyManualMotion]() {
+        m_rightPressed = true;
+        applyManualMotion();
+    });
+    connect(m_rightButton, &QPushButton::released, this, [this, applyManualMotion]() {
+        m_rightPressed = false;
+        applyManualMotion();
+    });
+
+    // 小车控制逻辑：
+    // - 板0: turn=前左, drive=前右
+    // - 板1: turn=后左, drive=后右
+    // - 前进/后退：四轮同速
+    // - 左转/右转：左右轮差速
+    // - 支持组合按键，例如“前进 + 左转”时四个电机协同工作
 }
 
 void MainWindow::buildAdvancedDialog()
