@@ -358,6 +358,7 @@ private:
     quint8 m_lastTxNodeId = 0;
     int m_lastTxBoardIndex = -1;
     bool m_waitingForTxResponse = false;
+    int m_motionCommandGeneration = 0;
     ScanState m_scanState;
     bool m_updatingDebugNodeCombo = false;
     bool m_switchingDebugNode = false;

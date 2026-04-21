@@ -2119,10 +2119,14 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
                 }
             }
 
-            int successCount = 0;
-            int failCount = 0;
-            QStringList statusList;
-            QMap<int, QStringList> boardStatusMap;
+            const int motionGeneration = ++m_motionCommandGeneration;
+            bool anyAxisNeedsClosedLoop = false;
+            for (const WheelCommand &command : wheelCommands) {
+                if (!axisInClosedLoop(command.boardIndex, command.nodeId)) {
+                    anyAxisNeedsClosedLoop = true;
+                    break;
+                }
+            }
 
             QList<bool> preparedResults;
             preparedResults.reserve(wheelCommands.size());
@@ -2133,44 +2137,68 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
                                                                  command.turnAxis));
             }
 
-            for (int i = 0; i < wheelCommands.size(); ++i) {
-                const WheelCommand &command = wheelCommands.at(i);
-                const bool preparedOk = preparedResults.value(i, false);
-                const bool ok = preparedOk
-                        ? sendPreparedAxisVelocity(command.boardIndex,
-                                                   command.nodeId,
-                                                   command.speedMmPerSecond,
-                                                   command.turnAxis)
-                        : false;
+            const auto sendCommands = [this, motionGeneration, boardIndices, wheelCommands](const QList<bool> &prepared) {
+                if (motionGeneration != m_motionCommandGeneration) {
+                    return;
+                }
 
-                successCount += ok ? 1 : 0;
-                failCount += ok ? 0 : 1;
-                boardStatusMap[command.boardIndex] << QStringLiteral("%1%2")
-                                                      .arg(command.turnAxis ? QStringLiteral("L") : QStringLiteral("R"))
-                                                      .arg(ok ? QStringLiteral("OK") : QStringLiteral("FAIL"));
+                int successCount = 0;
+                int failCount = 0;
+                QStringList statusList;
+                QMap<int, QStringList> boardStatusMap;
+
+                for (int i = 0; i < wheelCommands.size(); ++i) {
+                    const WheelCommand &command = wheelCommands.at(i);
+                    const bool preparedOk = prepared.value(i, false);
+                    const bool ok = preparedOk
+                            ? sendPreparedAxisVelocity(command.boardIndex,
+                                                       command.nodeId,
+                                                       command.speedMmPerSecond,
+                                                       command.turnAxis)
+                            : false;
+
+                    successCount += ok ? 1 : 0;
+                    failCount += ok ? 0 : 1;
+                    boardStatusMap[command.boardIndex] << QStringLiteral("%1%2")
+                                                          .arg(command.turnAxis ? QStringLiteral("L") : QStringLiteral("R"))
+                                                          .arg(ok ? QStringLiteral("OK") : QStringLiteral("FAIL"));
+                }
+
+                for (const int boardIndex : boardIndices) {
+                    const QStringList parts = boardStatusMap.value(boardIndex);
+                    const QString leftState = parts.value(0, QStringLiteral("LFAIL")).mid(1);
+                    const QString rightState = parts.value(1, QStringLiteral("RFAIL")).mid(1);
+                    statusList << QStringLiteral("%1:L%2 R%3")
+                                  .arg(boardDisplayName(boardIndex))
+                                  .arg(leftState)
+                                  .arg(rightState);
+                }
+
+                const int totalWheelGroups = wheelCommands.size();
+                QString syncStatus = QString(zh("e5908ce6ada5") + " %1/%2 " + zh("e68890e58a9f"))
+                        .arg(successCount)
+                        .arg(totalWheelGroups);
+                if (failCount > 0) {
+                    syncStatus += QStringLiteral(" [%1").arg(failCount) + zh("e5a4b1e8b4a5") + QStringLiteral("]");
+                }
+                updateProgramStatus(syncStatus + QStringLiteral(" - ") + statusList.join(QStringLiteral(" ")));
+            };
+
+            if (anyAxisNeedsClosedLoop) {
+                appendLog(QStringLiteral("Motion prepare: waiting briefly for all target axes to enter closed loop before sending velocity"));
+                updateProgramStatus(QStringLiteral("正在等待四个电机进入闭环后同步启动"));
+                QTimer::singleShot(350, this, [sendCommands, preparedResults]() {
+                    sendCommands(preparedResults);
+                });
+                return;
             }
 
-            for (const int boardIndex : boardIndices) {
-                const QStringList parts = boardStatusMap.value(boardIndex);
-                const QString leftState = parts.value(0, QStringLiteral("LFAIL")).mid(1);
-                const QString rightState = parts.value(1, QStringLiteral("RFAIL")).mid(1);
-                statusList << QStringLiteral("%1:L%2 R%3")
-                              .arg(boardDisplayName(boardIndex))
-                              .arg(leftState)
-                              .arg(rightState);
-            }
-
-            const int totalWheelGroups = wheelCommands.size();
-            QString syncStatus = QString(zh("e5908ce6ada5") + " %1/%2 " + zh("e68890e58a9f"))
-                    .arg(successCount)
-                    .arg(totalWheelGroups);
-            if (failCount > 0) {
-                syncStatus += QStringLiteral(" [%1").arg(failCount) + zh("e5a4b1e8b4a5") + QStringLiteral("]");
-            }
-            updateProgramStatus(syncStatus + QStringLiteral(" - ") + statusList.join(QStringLiteral(" ")));
+            sendCommands(preparedResults);
         });
 
         connect(button, &QPushButton::released, this, [this]() {
+            ++m_motionCommandGeneration;
+
             const QList<int> boardIndices = connectedBoardIndices();
             if (boardIndices.isEmpty()) {
                 return;
