@@ -1495,13 +1495,12 @@ void MainWindow::enableAxes()
         return;
     }
 
-    int enabledAxisCount = 0;
-    for (const int boardIndex : boardIndices) {
-        ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
-        if (!controller || !controller->isConnected()) {
-            continue;
-        }
+    const auto hex32 = [](quint32 value) {
+        return QStringLiteral("0x%1").arg(value, 8, 16, QLatin1Char('0')).toUpper();
+    };
 
+    QList<QPair<int, int>> axisTargets;
+    for (const int boardIndex : boardIndices) {
         QList<quint8> nodeIds;
         nodeIds << boardTurnNodeId(boardIndex);
         const quint8 driveNodeId = boardDriveNodeId(boardIndex);
@@ -1510,38 +1509,161 @@ void MainWindow::enableAxes()
         }
 
         for (const quint8 nodeId : nodeIds) {
-            if (ensureAxisClosedLoop(boardIndex, nodeId)) {
-                ++enabledAxisCount;
-            }
-            controller->requestAllTelemetry(nodeId, false);
+            axisTargets.append(qMakePair(boardIndex, int(nodeId)));
         }
     }
 
-    QTimer::singleShot(350, this, [this, boardIndices]() {
-        for (const int boardIndex : boardIndices) {
+    if (axisTargets.isEmpty()) {
+        appendLog(QStringLiteral("Enable aborted: no axis targets found"));
+        updateProgramStatus(QStringLiteral("No axis targets"));
+        return;
+    }
+
+    appendLog(QStringLiteral("Enable all axes: entering IDLE, clearing errors, then closing loop"));
+    updateProgramStatus(zh("e6ada3e59ca8e4bdbfe883bde585a8e983a8e794b5e69cba"));
+
+    for (const auto &target : axisTargets) {
+        const int boardIndex = target.first;
+        const quint8 nodeId = static_cast<quint8>(target.second & 0x3F);
+        ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
+        if (!controller || !controller->isConnected()) {
+            continue;
+        }
+
+        controller->requestIdle(nodeId);
+        controller->clearErrors(nodeId, false);
+        controller->requestAllTelemetry(nodeId, false);
+    }
+
+    QTimer::singleShot(600, this, [this, axisTargets, hex32]() {
+        QList<QPair<int, int>> calibrationTargets;
+
+        for (const auto &target : axisTargets) {
+            const int boardIndex = target.first;
+            const quint8 nodeId = static_cast<quint8>(target.second & 0x3F);
             ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
             if (!controller || !controller->isConnected()) {
                 continue;
             }
 
-            QList<quint8> nodeIds;
-            nodeIds << boardTurnNodeId(boardIndex);
-            const quint8 driveNodeId = boardDriveNodeId(boardIndex);
-            if (!nodeIds.contains(driveNodeId)) {
-                nodeIds << driveNodeId;
+            const ODriveMotorController::AxisStatus &status = controller->status(nodeId);
+            const bool hasErrors = status.axisError != 0
+                    || status.motorError != 0
+                    || status.encoderError != 0
+                    || status.controllerError != 0;
+            const bool needsCalibration = (status.axisError & 0x00000001u) != 0
+                    || status.motorError != 0
+                    || status.encoderError != 0;
+
+            if (hasErrors) {
+                appendLog(QStringLiteral("%1 Node %2 enable precheck: axis=%3 motor=%4 encoder=%5 controller=%6")
+                          .arg(boardLogPrefix(boardIndex))
+                          .arg(nodeId)
+                          .arg(hex32(status.axisError))
+                          .arg(hex32(status.motorError))
+                          .arg(hex32(status.encoderError))
+                          .arg(hex32(status.controllerError)));
             }
 
-            for (const quint8 nodeId : nodeIds) {
-                controller->requestAllTelemetry(nodeId, false);
+            if (needsCalibration) {
+                calibrationTargets.append(target);
             }
         }
-    });
 
-    const QString statusMessage = enabledAxisCount > 0
-            ? zh("e5b7b2e58f91e98081e585a8e983a8e794b5e69cbae4bdbfe883bd")
-            : zh("e4bdbfe883bde5a4b1e8b4a5");
-    appendLog(statusMessage);
-    updateProgramStatus(statusMessage);
+        if (!calibrationTargets.isEmpty()) {
+            appendLog(QStringLiteral("Enable detected %1 axis(es) needing full calibration before closed loop")
+                      .arg(calibrationTargets.size()));
+            for (const auto &target : calibrationTargets) {
+                const int boardIndex = target.first;
+                const quint8 nodeId = static_cast<quint8>(target.second & 0x3F);
+                ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
+                if (!controller || !controller->isConnected()) {
+                    continue;
+                }
+
+                appendLog(QStringLiteral("%1 Node %2 running full calibration during enable")
+                          .arg(boardLogPrefix(boardIndex))
+                          .arg(nodeId));
+                controller->requestIdle(nodeId);
+                controller->clearErrors(nodeId, false);
+                controller->requestFullCalibration(nodeId);
+            }
+        }
+
+        const int closeLoopDelayMs = calibrationTargets.isEmpty() ? 800 : 12500;
+        QTimer::singleShot(closeLoopDelayMs, this, [this, axisTargets, hex32]() {
+            for (const auto &target : axisTargets) {
+                const int boardIndex = target.first;
+                const quint8 nodeId = static_cast<quint8>(target.second & 0x3F);
+                ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
+                if (!controller || !controller->isConnected()) {
+                    continue;
+                }
+
+                controller->requestAllTelemetry(nodeId, false);
+                controller->clearErrors(nodeId, false);
+                const float safeVelLimit = (nodeId == 0) ? 5.0f : 20.0f;
+                controller->setLimits(nodeId, safeVelLimit, static_cast<float>(currentLimitAmps()));
+                ensureAxisClosedLoop(boardIndex, nodeId);
+            }
+
+            QTimer::singleShot(1200, this, [this, axisTargets, hex32]() {
+                int successCount = 0;
+                QStringList failedAxes;
+
+                for (const auto &target : axisTargets) {
+                    const int boardIndex = target.first;
+                    const quint8 nodeId = static_cast<quint8>(target.second & 0x3F);
+                    ODriveMotorController *controller = m_boardRuntimes[boardIndex].controller;
+                    if (!controller || !controller->isConnected()) {
+                        failedAxes << QStringLiteral("%1 Node %2 disconnected")
+                                      .arg(boardLogPrefix(boardIndex))
+                                      .arg(nodeId);
+                        continue;
+                    }
+
+                    controller->requestAllTelemetry(nodeId, false);
+                    const ODriveMotorController::AxisStatus &status = controller->status(nodeId);
+                    const bool ok = status.axisState == ODriveMotorController::ClosedLoopControl
+                            && status.axisError == 0
+                            && status.motorError == 0
+                            && status.encoderError == 0
+                            && status.controllerError == 0;
+
+                    if (ok) {
+                        ++successCount;
+                        continue;
+                    }
+
+                    failedAxes << QStringLiteral("%1 Node %2 state=%3 axis=%4 motor=%5 encoder=%6 controller=%7")
+                                  .arg(boardLogPrefix(boardIndex))
+                                  .arg(nodeId)
+                                  .arg(status.axisState)
+                                  .arg(hex32(status.axisError))
+                                  .arg(hex32(status.motorError))
+                                  .arg(hex32(status.encoderError))
+                                  .arg(hex32(status.controllerError));
+                }
+
+                if (failedAxes.isEmpty()) {
+                    const QString statusMessage = QStringLiteral("All %1 axis(es) entered closed loop without errors")
+                            .arg(successCount);
+                    appendLog(statusMessage);
+                    updateProgramStatus(zh("e585a8e983a8e794b5e69cbae5b7b2e8bf9be585a5e997ade78eafefbc8ce697a0e99499e8afaf"));
+                } else {
+                    appendLog(QStringLiteral("Enable finished with %1/%2 axis(es) ready")
+                              .arg(successCount)
+                              .arg(axisTargets.size()));
+                    for (const QString &line : failedAxes) {
+                        appendLog(line);
+                    }
+                    updateProgramStatus(QStringLiteral("部分电机未进入闭环或仍有错误"));
+                }
+
+                scheduleStatusPanelUpdate();
+            });
+        });
+    });
 }
 
 void MainWindow::startScanProgram()
@@ -1921,8 +2043,8 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
     connect(m_stopButton, &QPushButton::clicked,
             this, &MainWindow::stopProgram);
 
-    auto connectJogButton = [this](QPushButton *button, bool turnAxis, double direction) {
-        connect(button, &QPushButton::pressed, this, [this, turnAxis, direction]() {
+    auto connectJogButton = [this](QPushButton *button, bool turning, double direction) {
+        connect(button, &QPushButton::pressed, this, [this, turning, direction]() {
             const QList<int> boardIndices = connectedBoardIndices();
             if (boardIndices.isEmpty()) {
                 return;
@@ -1933,45 +2055,70 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
                 updateProgramStatus(zh("e6898be58aa8e782b9e58aa8e5b7b2e4b8ade6ada2e887aae58aa8e689abe68f8f"));
             }
 
+            QStringList notReadyAxes;
+            for (const int boardIndex : boardIndices) {
+                QList<quint8> requiredNodeIds;
+                requiredNodeIds << boardTurnNodeId(boardIndex);
+                const quint8 driveNodeId = boardDriveNodeId(boardIndex);
+                if (!requiredNodeIds.contains(driveNodeId)) {
+                    requiredNodeIds << driveNodeId;
+                }
+
+                for (const quint8 requiredNodeId : requiredNodeIds) {
+                    if (!axisInClosedLoop(boardIndex, requiredNodeId) || axisHasActiveErrors(boardIndex, requiredNodeId)) {
+                        notReadyAxes << QStringLiteral("%1 Node %2")
+                                        .arg(boardLogPrefix(boardIndex))
+                                        .arg(requiredNodeId);
+                    }
+                }
+            }
+
+            if (!notReadyAxes.isEmpty()) {
+                appendLog(QStringLiteral("Motion blocked: axes not ready -> %1")
+                          .arg(notReadyAxes.join(QStringLiteral(", "))));
+                updateProgramStatus(QStringLiteral("小车运动已拒绝：存在未闭环或带错误电机"));
+                return;
+            }
+
             const double targetSpeed = direction * qMax(0.1, m_jogSpeedSpin->value());
             int successCount = 0;
             int failCount = 0;
             QStringList statusList;
 
             for (const int boardIndex : boardIndices) {
-                const quint8 nodeId = turnAxis ? boardTurnNodeId(boardIndex) : boardDriveNodeId(boardIndex);
-                const QString axisKey = motionAxisKey(boardIndex, nodeId, turnAxis);
+                bool leftOk = false;
+                bool rightOk = false;
 
-                if (axisHasActiveErrors(boardIndex, nodeId)) {
-                    logMotionIssueOnce(axisKey + QStringLiteral("/errors"),
-                                       QStringLiteral("%1 Node %2 has active errors, jog ignored")
-                                       .arg(boardLogPrefix(boardIndex))
-                                       .arg(nodeId));
-                    ++failCount;
-                    statusList << QStringLiteral("%1:ERR").arg(boardDisplayName(boardIndex));
-                    continue;
-                }
-
-                const bool success = commandAxisVelocity(boardIndex, nodeId, targetSpeed, turnAxis);
-                if (success) {
-                    ++successCount;
-                    statusList << QStringLiteral("%1:OK").arg(boardDisplayName(boardIndex));
+                if (turning) {
+                    leftOk = commandWheelVelocity(boardIndex, true, -targetSpeed);
+                    rightOk = commandWheelVelocity(boardIndex, false, targetSpeed);
                 } else {
-                    ++failCount;
-                    statusList << QStringLiteral("%1:FAIL").arg(boardDisplayName(boardIndex));
+                    leftOk = commandWheelVelocity(boardIndex, true, targetSpeed);
+                    rightOk = commandWheelVelocity(boardIndex, false, targetSpeed);
                 }
+
+                successCount += leftOk ? 1 : 0;
+                successCount += rightOk ? 1 : 0;
+                failCount += leftOk ? 0 : 1;
+                failCount += rightOk ? 0 : 1;
+
+                statusList << QStringLiteral("%1:L%2 R%3")
+                              .arg(boardDisplayName(boardIndex))
+                              .arg(leftOk ? QStringLiteral("OK") : QStringLiteral("FAIL"))
+                              .arg(rightOk ? QStringLiteral("OK") : QStringLiteral("FAIL"));
             }
 
+            const int totalWheelGroups = boardIndices.size() * 2;
             QString syncStatus = QString(zh("e5908ce6ada5") + " %1/%2 " + zh("e68890e58a9f"))
                     .arg(successCount)
-                    .arg(boardIndices.size());
+                    .arg(totalWheelGroups);
             if (failCount > 0) {
                 syncStatus += QStringLiteral(" [%1").arg(failCount) + zh("e5a4b1e8b4a5") + QStringLiteral("]");
             }
             updateProgramStatus(syncStatus + QStringLiteral(" - ") + statusList.join(QStringLiteral(" ")));
         });
 
-        connect(button, &QPushButton::released, this, [this, turnAxis]() {
+        connect(button, &QPushButton::released, this, [this]() {
             const QList<int> boardIndices = connectedBoardIndices();
             if (boardIndices.isEmpty()) {
                 return;
@@ -1979,20 +2126,24 @@ void MainWindow::buildMainInterface(QVBoxLayout *mainLayout)
 
             int stopCount = 0;
             for (const int boardIndex : boardIndices) {
-                const quint8 nodeId = turnAxis ? boardTurnNodeId(boardIndex) : boardDriveNodeId(boardIndex);
-                if (stopAxisVelocity(boardIndex, nodeId)) {
-                    ++stopCount;
+                stopCount += stopAxisVelocity(boardIndex, boardTurnNodeId(boardIndex)) ? 1 : 0;
+                const quint8 driveNodeId = boardDriveNodeId(boardIndex);
+                if (driveNodeId != boardTurnNodeId(boardIndex)) {
+                    stopCount += stopAxisVelocity(boardIndex, driveNodeId) ? 1 : 0;
                 }
             }
-            updateProgramStatus(QString(zh("e5819ce6ada2") + " %1/%2").arg(stopCount).arg(boardIndices.size()));
+            updateProgramStatus(QString(zh("e5819ce6ada2") + " %1").arg(stopCount));
         });
     };
 
-    // 前进后退控制驱动轮（drive，turnAxis=false），左右转控制转向轮（turn，turnAxis=true）
-    connectJogButton(m_forwardButton, false, 1.0);   // 驱动轮正向
-    connectJogButton(m_backwardButton, false, -1.0); // 驱动轮反向
-    connectJogButton(m_leftButton, true, -1.0);      // 转向轮左转
-    connectJogButton(m_rightButton, true, 1.0);      // 转向轮右转
+    // 当前四轮映射：
+    // 板0: turn=前左, drive=前右
+    // 板1: turn=后左, drive=后右
+    // 前进/后退：四轮同速；左右：左右轮差速
+    connectJogButton(m_forwardButton, false, 1.0);
+    connectJogButton(m_backwardButton, false, -1.0);
+    connectJogButton(m_leftButton, true, -1.0);
+    connectJogButton(m_rightButton, true, 1.0);
 }
 
 void MainWindow::buildAdvancedDialog()
@@ -4529,6 +4680,12 @@ bool MainWindow::ensureAxisClosedLoop(int boardIndex, quint8 nodeId)
     }
 
     return controller->requestClosedLoop(nodeId);
+}
+
+bool MainWindow::commandWheelVelocity(int boardIndex, bool leftWheel, double speedMmPerSecond)
+{
+    const quint8 nodeId = leftWheel ? boardTurnNodeId(boardIndex) : boardDriveNodeId(boardIndex);
+    return commandAxisVelocity(boardIndex, nodeId, speedMmPerSecond, leftWheel);
 }
 
 bool MainWindow::commandAxisVelocity(int boardIndex, quint8 nodeId, double speedMmPerSecond, bool turnAxis)

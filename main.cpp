@@ -7,6 +7,7 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
+#include <QFont>
 #include <QFile>
 #include <QFileInfo>
 #include <QMutex>
@@ -210,11 +211,30 @@ void purecallHandler()
 void configureQtLogging()
 {
     qputenv("QT_DEBUG_PLUGINS", QByteArrayLiteral("1"));
+#ifdef Q_OS_WIN
+    qputenv("QT_NO_DIRECTWRITE", QByteArrayLiteral("1"));
+#endif
     qInstallMessageHandler(messageHandler);
     std::set_terminate(terminateHandler);
 #ifdef Q_OS_WIN
     ::SetUnhandledExceptionFilter(unhandledExceptionFilter);
     _set_purecall_handler(purecallHandler);
+#endif
+}
+
+void applySafeApplicationFont(QApplication &app)
+{
+#ifdef Q_OS_WIN
+    QFont font(QStringLiteral("Microsoft YaHei UI"), 9);
+    if (!font.exactMatch()) {
+        font = QFont(QStringLiteral("Microsoft YaHei"), 9);
+    }
+    if (!font.exactMatch()) {
+        font = QFont(QStringLiteral("Segoe UI"), 9);
+    }
+    app.setFont(font);
+#else
+    Q_UNUSED(app);
 #endif
 }
 
@@ -233,6 +253,7 @@ int main(int argc, char *argv[])
 
     try {
         SafeApplication a(argc, argv);
+        applySafeApplicationFont(a);
         dumpStartupInfo();
 
         MainWindow w;
